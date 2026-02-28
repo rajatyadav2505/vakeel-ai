@@ -141,7 +141,7 @@ export default async function CaseDetailsPage(props: { params: Promise<{ id: str
                   defaultValue="Establish strongest legal route with immediate tactical next steps."
                 />
               </Label>
-              <Button type="submit">Run Baseline Analysis</Button>
+              <Button type="submit">Queue Baseline Analysis</Button>
             </form>
           </Card>
 
@@ -162,7 +162,7 @@ export default async function CaseDetailsPage(props: { params: Promise<{ id: str
                 Depth (5-12)
                 <Input name="depth" type="number" min={5} max={12} defaultValue={7} />
               </Label>
-              <Button type="submit">Run Strategy Analysis</Button>
+              <Button type="submit">Queue Strategy Analysis</Button>
             </form>
           </Card>
         </div>

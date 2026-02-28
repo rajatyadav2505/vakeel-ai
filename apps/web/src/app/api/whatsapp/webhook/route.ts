@@ -6,12 +6,34 @@ function normalizePhone(value: string) {
   return value.replace(/^whatsapp:/i, '').replace(/[^\d+]/g, '');
 }
 
+function extractMessageBody(payload: Record<string, unknown>) {
+  const candidates = [
+    payload.body,
+    (payload.message as { text?: string } | undefined)?.text,
+    (payload.message as { payload?: { text?: string } } | undefined)?.payload?.text,
+    (payload.interactive as { button_reply?: { title?: string } } | undefined)?.button_reply?.title,
+    (payload.interactive as { button_reply?: { id?: string } } | undefined)?.button_reply?.id,
+    (payload.button as { text?: string } | undefined)?.text,
+    (payload.button as { payload?: string } | undefined)?.payload,
+    (payload.postback as { text?: string } | undefined)?.text,
+    (payload.postback as { payload?: string } | undefined)?.payload,
+  ];
+
+  for (const item of candidates) {
+    if (typeof item === 'string' && item.trim().length > 0) {
+      return item.trim();
+    }
+  }
+
+  return '';
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const json = await request.json();
+    const json = (await request.json()) as Record<string, unknown>;
     const payload = whatsappWebhookSchema.parse({
       from: json.from || json.phone,
-      body: json.body || json.message?.text,
+      body: extractMessageBody(json),
       messageId: json.messageId || json.id || crypto.randomUUID(),
       mediaUrl: json.mediaUrl,
     });

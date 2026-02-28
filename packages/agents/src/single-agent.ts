@@ -17,6 +17,7 @@ export interface SingleAgentInput {
   reliefSought?: string | null;
   parsedDocumentTexts?: string[];
   voiceTranscript?: string | null;
+  outputLanguage?: 'en-IN' | 'hi-IN';
   llmConfig?: RuntimeLlmConfig;
 }
 
@@ -33,6 +34,12 @@ export interface SingleAgentOutput {
 export async function runSingleAgentSimulation(
   input: SingleAgentInput
 ): Promise<SingleAgentOutput> {
+  const outputLanguage = input.outputLanguage ?? 'en-IN';
+  const languageInstruction =
+    outputLanguage === 'hi-IN'
+      ? 'Write analysis in professional Hindi (Devanagari script) suitable for Indian legal practice.'
+      : 'Write analysis in professional English suitable for Indian legal practice.';
+
   const legalResearchPacket = await buildLegalResearchPacket({
     caseId: input.caseId,
     summary: input.facts,
@@ -52,6 +59,7 @@ export async function runSingleAgentSimulation(
         'You are a senior Indian litigation strategist.',
         'Return strict JSON with "analysis" and "confidence" in [0,1].',
         'Do not assert legal propositions unless supported by provided authorities.',
+        languageInstruction,
       ].join(' '),
     userPrompt: [
       `Objective: ${input.objective}`,
@@ -74,7 +82,9 @@ export async function runSingleAgentSimulation(
   const analysis =
     typeof llm?.analysis === 'string' && llm.analysis.trim().length > 20
       ? llm.analysis.trim()
-      : 'Initial strategy recommends preserving evidence chain, seeking early interim protection, and forcing timeline discipline. No unsupported legal proposition should be acted upon without verified authorities.';
+      : outputLanguage === 'hi-IN'
+        ? 'प्रारंभिक रणनीति में साक्ष्य श्रृंखला सुरक्षित रखना, शीघ्र अंतरिम राहत मांगना और समय-सीमा अनुशासन लागू करना शामिल है। सत्यापित प्राधिकरण के बिना किसी विधिक दावे पर कार्रवाई न करें।'
+        : 'Initial strategy recommends preserving evidence chain, seeking early interim protection, and forcing timeline discipline. No unsupported legal proposition should be acted upon without verified authorities.';
 
   const legalClaims = verifyLegalClaims({
     claims: [

@@ -14,9 +14,10 @@ const isProtectedRoute = createRouteMatcher([
   '/api/whatsapp/send',
   '/api/whatsapp/messages(.*)',
 ]);
+const isWorkerRoute = createRouteMatcher(['/api/simulations/worker']);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
+  if (isProtectedRoute(req) && !isWorkerRoute(req)) {
     await auth.protect();
   }
 });

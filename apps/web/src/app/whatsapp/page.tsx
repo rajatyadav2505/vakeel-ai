@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -37,6 +38,13 @@ interface HistoryPayload {
   conversations: ConversationPreview[];
 }
 
+const TEMPLATE_OPTIONS = [
+  { id: '', label: 'No template (plain text)' },
+  { id: 'case_update_ack', label: 'Case update acknowledgement' },
+  { id: 'document_request', label: 'Document request' },
+  { id: 'hearing_reminder', label: 'Hearing readiness check' },
+] as const;
+
 function formatTime(iso: string) {
   const date = new Date(iso);
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
@@ -52,6 +60,8 @@ export default function WhatsAppPage() {
   const [selectedPhone, setSelectedPhone] = useState('');
   const [groundedLegalReply, setGroundedLegalReply] = useState(false);
   const [groundingCaseId, setGroundingCaseId] = useState('');
+  const [templateId, setTemplateId] = useState<(typeof TEMPLATE_OPTIONS)[number]['id']>('');
+  const [templateLocale, setTemplateLocale] = useState<'en-IN' | 'hi-IN'>('en-IN');
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [conversations, setConversations] = useState<ConversationPreview[]>([]);
   const [page, setPage] = useState(1);
@@ -152,8 +162,13 @@ export default function WhatsAppPage() {
   async function onSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const to = (selectedPhone || manualPhone).trim();
-    if (!to || !messageText.trim()) {
-      setStatus('Phone and message are required.');
+    const usingTemplate = Boolean(templateId);
+    if (!to || (!messageText.trim() && !usingTemplate)) {
+      setStatus('Phone and either message text or template are required.');
+      return;
+    }
+    if (usingTemplate && groundedLegalReply) {
+      setStatus('Template send cannot be combined with grounded legal reply in one request.');
       return;
     }
     if (groundedLegalReply && !groundingCaseId.trim()) {
@@ -167,7 +182,8 @@ export default function WhatsAppPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to,
-        text: messageText,
+        ...(messageText.trim() ? { text: messageText } : {}),
+        ...(usingTemplate ? { templateId, templateLocale } : {}),
         ...(groundedLegalReply
           ? {
               groundedLegalReply: true,
@@ -350,6 +366,33 @@ export default function WhatsAppPage() {
                 placeholder="Case update summary for client..."
               />
             </Label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Label>
+                Interactive template
+                <Select
+                  value={templateId}
+                  onChange={(event) =>
+                    setTemplateId(event.target.value as (typeof TEMPLATE_OPTIONS)[number]['id'])
+                  }
+                >
+                  {TEMPLATE_OPTIONS.map((item) => (
+                    <option key={item.id || 'plain'} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
+              </Label>
+              <Label>
+                Template language
+                <Select
+                  value={templateLocale}
+                  onChange={(event) => setTemplateLocale(event.target.value as 'en-IN' | 'hi-IN')}
+                >
+                  <option value="en-IN">English (India)</option>
+                  <option value="hi-IN">Hindi (India)</option>
+                </Select>
+              </Label>
+            </div>
             <Label>
               <span className="flex items-center gap-2">
                 <input

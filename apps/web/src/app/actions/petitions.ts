@@ -40,7 +40,7 @@ async function getUserLlmConfig(userId: string) {
   const supabase = createSupabaseServerClient();
   const settings = await supabase
     .from('user_settings')
-    .select('llm_provider,llm_model,llm_api_key,llm_base_url,free_tier_only')
+    .select('llm_provider,llm_model,llm_api_key,llm_base_url,free_tier_only,preferred_language')
     .eq('owner_user_id', userId)
     .maybeSingle();
 
@@ -54,6 +54,10 @@ async function getUserLlmConfig(userId: string) {
     apiKey: settings.data.llm_api_key ?? undefined,
     baseUrl: settings.data.llm_base_url ?? undefined,
     freeTierOnly: settings.data.free_tier_only ?? true,
+    outputLanguage:
+      settings.data.preferred_language === 'hi-IN'
+        ? ('hi-IN' as const)
+        : ('en-IN' as const),
   };
 }
 
@@ -79,12 +83,13 @@ export async function generatePetitionAction(formData: FormData) {
     jurisdiction: caseContext.jurisdiction ?? null,
     parsedDocumentTexts: caseContext.parsedDocumentTexts,
     voiceTranscript: caseContext.voice_transcript ?? null,
+    ...(llmConfig ? { outputLanguage: llmConfig.outputLanguage } : {}),
     ...(llmConfig ? { llmConfig } : {}),
   });
 
   const supabase = createSupabaseServerClient();
   const petitionId = crypto.randomUUID();
-  const { error } = await supabase.from('petitions').insert({
+  const petitionInsert = {
     id: petitionId,
     owner_user_id: user.userId,
     case_id: payload.caseId,
@@ -103,9 +108,44 @@ export async function generatePetitionAction(formData: FormData) {
       legalGroundingStatus: result.legalGroundingStatus,
     },
     lawyer_verified: payload.lawyerVerified,
-  });
+    current_version: 1,
+    review_status: payload.lawyerVerified ? 'approved' : 'draft',
+    review_notes: null,
+    last_reviewed_by: payload.lawyerVerified ? user.userId : null,
+    last_reviewed_at: payload.lawyerVerified ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  };
 
-  if (error) throw new Error('Failed to save petition. Please try again.');
+  let insertResult = await supabase.from('petitions').insert(petitionInsert);
+  if (insertResult.error) {
+    // Backward compatibility when review columns are not present yet.
+    insertResult = await supabase.from('petitions').insert({
+      id: petitionId,
+      owner_user_id: user.userId,
+      case_id: payload.caseId,
+      petition_type: payload.petitionType,
+      court_template: payload.courtTemplate,
+      body: result.body,
+      confidence: result.confidence,
+      citations_json: petitionInsert.citations_json,
+      lawyer_verified: payload.lawyerVerified,
+    });
+  }
+
+  if (insertResult.error) throw new Error('Failed to save petition. Please try again.');
+
+  const versionInsert = await supabase.from('petition_versions').insert({
+    petition_id: petitionId,
+    owner_user_id: user.userId,
+    version: 1,
+    body: result.body,
+    change_summary: 'Initial AI-generated draft',
+    review_action: payload.lawyerVerified ? 'approved' : 'generated',
+    created_by: user.userId,
+  });
+  if (versionInsert.error) {
+    console.warn('[petitions] failed to persist initial petition version:', versionInsert.error.message);
+  }
 
   await logAiAudit({
     caseId: payload.caseId,

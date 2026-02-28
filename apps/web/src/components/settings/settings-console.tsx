@@ -55,6 +55,7 @@ interface SettingsPayload {
   freeTierOnly: boolean;
   defaultPageSize: number;
   timezone: string;
+  preferredLanguage: 'en-IN' | 'hi-IN';
   hasLlmApiKey: boolean;
   llmApiKeyMasked: string;
 }
@@ -68,6 +69,7 @@ const DEFAULT_SETTINGS: SettingsPayload = {
   freeTierOnly: true,
   defaultPageSize: 12,
   timezone: 'Asia/Kolkata',
+  preferredLanguage: 'en-IN',
   hasLlmApiKey: false,
   llmApiKeyMasked: '',
 };
@@ -120,6 +122,7 @@ export function SettingsConsole(props: {
         freeTierOnly: settings.freeTierOnly,
         defaultPageSize: settings.defaultPageSize,
         timezone: settings.timezone,
+        preferredLanguage: settings.preferredLanguage,
         llmApiKey: llmApiKeyInput.trim() || undefined,
         clearLlmApiKey: clearApiKey,
       }),
@@ -319,6 +322,22 @@ export function SettingsConsole(props: {
               }
               placeholder="Asia/Kolkata"
             />
+          </Label>
+
+          <Label>
+            Preferred language
+            <Select
+              value={settings.preferredLanguage}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  preferredLanguage: event.target.value as SettingsPayload['preferredLanguage'],
+                }))
+              }
+            >
+              <option value="en-IN">English (India)</option>
+              <option value="hi-IN">Hindi (India)</option>
+            </Select>
           </Label>
 
           <div className="rounded-lg border border-border bg-background p-3 text-sm">

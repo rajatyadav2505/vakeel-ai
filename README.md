@@ -193,10 +193,10 @@ npm run agents:test
 - Input sanitization + rate limiting hooks
 - DPDP consent + legal disclaimer shown globally
 
-## Next Phase Extensions
+## Phase 2 Extensions (Implemented)
 
-- Live e-Courts adapters
-- Hindi multilingual mode
-- Full versioned lawyer review workflow
-- Queue-backed async simulation workers
-- Production WhatsApp interactive button templates
+- Live e-Courts adapters (`POST /api/ecourts/sync` with real connector + sync event persistence)
+- Hindi multilingual mode (`preferred_language` settings + Hindi generation support)
+- Full versioned lawyer review workflow (`petition_versions`, review status transitions, review API/page)
+- Queue-backed async simulation workers (`simulation_jobs` + worker endpoint + queued UI)
+- Production WhatsApp interactive button templates (interactive template registry + API/UI/webhook handling)

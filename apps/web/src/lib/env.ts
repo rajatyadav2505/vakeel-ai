@@ -26,10 +26,13 @@ const envSchema = z.object({
   OLLAMA_API_KEY: z.string().optional(),
   INDIA_CODE_SEARCH_URL: z.string().url().optional(),
   ECOURTS_JUDGMENTS_SEARCH_URL: z.string().url().optional(),
+  ECOURTS_CASE_STATUS_URL: z.string().url().optional(),
+  ECOURTS_API_KEY: z.string().optional(),
   SUPREME_COURT_SEARCH_URL: z.string().url().optional(),
   VERDICTUM_SEARCH_URL: z.string().url().optional(),
   SCC_ONLINE_SEARCH_URL: z.string().url().optional(),
   DATA_ENCRYPTION_KEY: z.string().optional(),
+  SIMULATION_WORKER_TOKEN: z.string().optional(),
 });
 
 const raw = {
@@ -61,10 +64,13 @@ const raw = {
   OLLAMA_API_KEY: process.env.OLLAMA_API_KEY,
   INDIA_CODE_SEARCH_URL: process.env.INDIA_CODE_SEARCH_URL,
   ECOURTS_JUDGMENTS_SEARCH_URL: process.env.ECOURTS_JUDGMENTS_SEARCH_URL,
+  ECOURTS_CASE_STATUS_URL: process.env.ECOURTS_CASE_STATUS_URL,
+  ECOURTS_API_KEY: process.env.ECOURTS_API_KEY,
   SUPREME_COURT_SEARCH_URL: process.env.SUPREME_COURT_SEARCH_URL,
   VERDICTUM_SEARCH_URL: process.env.VERDICTUM_SEARCH_URL,
   SCC_ONLINE_SEARCH_URL: process.env.SCC_ONLINE_SEARCH_URL,
   DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY,
+  SIMULATION_WORKER_TOKEN: process.env.SIMULATION_WORKER_TOKEN,
 };
 
 const parsed = envSchema.safeParse(raw);

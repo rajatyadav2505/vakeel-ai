@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { requireLawyerVerification } from '@nyaya/shared';
+import { requireAppUser } from '@/lib/auth';
 
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
+  const user = await requireAppUser();
   const supabase = createSupabaseServerClient();
 
-  const { data: petition } = await supabase.from('petitions').select('*').eq('id', id).single();
+  const { data: petition } = await supabase
+    .from('petitions')
+    .select('*')
+    .eq('id', id)
+    .eq('owner_user_id', user.userId)
+    .single();
   if (!petition) {
     return NextResponse.json({ error: 'Petition not found' }, { status: 404 });
   }

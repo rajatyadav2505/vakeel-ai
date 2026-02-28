@@ -18,6 +18,7 @@ const providerSchema = z.enum([
   'sarvam',
 ]);
 type LlmProvider = z.infer<typeof providerSchema>;
+const languageSchema = z.enum(['en-IN', 'hi-IN']);
 
 const updateSchema = z.object({
   llmProvider: providerSchema.optional(),
@@ -30,6 +31,7 @@ const updateSchema = z.object({
   freeTierOnly: z.boolean().optional(),
   defaultPageSize: z.number().int().min(5).max(50).optional(),
   timezone: z.string().min(2).max(100).optional(),
+  preferredLanguage: languageSchema.optional(),
 });
 
 const DEFAULT_SETTINGS = {
@@ -41,6 +43,7 @@ const DEFAULT_SETTINGS = {
   freeTierOnly: true,
   defaultPageSize: 12,
   timezone: 'Asia/Kolkata',
+  preferredLanguage: 'en-IN' as z.infer<typeof languageSchema>,
 };
 
 function maskApiKey(value: string | null | undefined) {
@@ -59,9 +62,11 @@ function toResponse(record: {
   free_tier_only?: boolean | null;
   default_page_size?: number | null;
   timezone?: string | null;
+  preferred_language?: string | null;
 }) {
   const llmApiKey = record.llm_api_key ?? '';
   const provider = providerSchema.safeParse(record.llm_provider);
+  const preferredLanguage = languageSchema.safeParse(record.preferred_language);
   return {
     llmProvider: provider.success ? provider.data : DEFAULT_SETTINGS.llmProvider,
     llmModel: record.llm_model ?? DEFAULT_SETTINGS.llmModel,
@@ -71,6 +76,9 @@ function toResponse(record: {
     freeTierOnly: record.free_tier_only ?? DEFAULT_SETTINGS.freeTierOnly,
     defaultPageSize: record.default_page_size ?? DEFAULT_SETTINGS.defaultPageSize,
     timezone: record.timezone ?? DEFAULT_SETTINGS.timezone,
+    preferredLanguage: preferredLanguage.success
+      ? preferredLanguage.data
+      : DEFAULT_SETTINGS.preferredLanguage,
     hasLlmApiKey: Boolean(llmApiKey),
     llmApiKeyMasked: maskApiKey(llmApiKey),
   };
@@ -81,7 +89,7 @@ async function getSettingsForUser(userId: string) {
   const { data, error } = await supabase
     .from('user_settings')
     .select(
-      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone'
+      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language'
     )
     .eq('owner_user_id', userId)
     .maybeSingle();
@@ -97,7 +105,7 @@ async function getSettingsForUser(userId: string) {
     .from('user_settings')
     .upsert({ owner_user_id: userId }, { onConflict: 'owner_user_id' })
     .select(
-      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone'
+      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language'
     )
     .single();
 
@@ -149,6 +157,7 @@ export async function PUT(request: NextRequest) {
     }
     if (payload.defaultPageSize !== undefined) update.default_page_size = payload.defaultPageSize;
     if (payload.timezone !== undefined) update.timezone = sanitizePlainText(payload.timezone);
+    if (payload.preferredLanguage !== undefined) update.preferred_language = payload.preferredLanguage;
     if (payload.clearLlmApiKey) update.llm_api_key = null;
     if (payload.llmApiKey !== undefined && payload.llmApiKey.trim().length > 0) {
       update.llm_api_key = payload.llmApiKey.trim();
@@ -159,7 +168,7 @@ export async function PUT(request: NextRequest) {
       .from('user_settings')
       .upsert(update, { onConflict: 'owner_user_id' })
       .select(
-        'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone'
+        'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language'
       )
       .single();
 

@@ -189,6 +189,27 @@ export async function getSimulationsPage(options?: PaginationOptions): Promise<
   };
 }
 
+export async function getSimulationJobsOverview(limit = 8) {
+  const user = await requireAppUser();
+  const supabase = createSupabaseServerClient();
+  const boundedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
+  const res = await supabase
+    .from('simulation_jobs')
+    .select(
+      'id,mode,status,objective,attempts,last_error,result_simulation_id,queued_at,started_at,finished_at,updated_at'
+    )
+    .eq('owner_user_id', user.userId)
+    .order('queued_at', { ascending: false })
+    .limit(boundedLimit);
+
+  if (res.error) {
+    console.error('[queries] simulation jobs list error:', res.error.message);
+    return [];
+  }
+
+  return res.data ?? [];
+}
+
 export async function getPetitionsPage(options?: PaginationOptions): Promise<
   PaginatedResult<{
     id: string;
@@ -197,29 +218,129 @@ export async function getPetitionsPage(options?: PaginationOptions): Promise<
     confidence: number | null;
     case_id: string;
     created_at: string;
+    review_status: string;
+    current_version: number;
+    last_reviewed_at: string | null;
   }>
 > {
   const user = await requireAppUser();
   const supabase = createSupabaseServerClient();
   const { page, pageSize, from, to } = normalizePagination(options);
-  const res = await supabase
+  let res: any = await supabase
     .from('petitions')
-    .select('id, petition_type, court_template, confidence, case_id, created_at', {
-      count: 'exact',
-    })
+    .select(
+      'id, petition_type, court_template, confidence, case_id, created_at, review_status, current_version, last_reviewed_at',
+      {
+        count: 'exact',
+      }
+    )
     .eq('owner_user_id', user.userId)
     .order('created_at', { ascending: false })
     .range(from, to);
 
+  if (res.error) {
+    // Backward compatibility when review columns are not present yet.
+    res = await supabase
+      .from('petitions')
+      .select('id, petition_type, court_template, confidence, case_id, created_at', {
+      count: 'exact',
+      })
+      .eq('owner_user_id', user.userId)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+  }
+
   if (res.error) console.error('[queries] petitions list error:', res.error.message);
+
+  const items = (res.data ?? []).map((item: unknown) => {
+    const row = item as {
+      id: string;
+      petition_type: string;
+      court_template: string;
+      confidence: number | null;
+      case_id: string;
+      created_at: string;
+      review_status?: string | null;
+      current_version?: number | null;
+      last_reviewed_at?: string | null;
+    };
+    return {
+      id: row.id,
+      petition_type: row.petition_type,
+      court_template: row.court_template,
+      confidence: row.confidence,
+      case_id: row.case_id,
+      created_at: row.created_at,
+      review_status: row.review_status ?? 'draft',
+      current_version: Math.max(1, row.current_version ?? 1),
+      last_reviewed_at: row.last_reviewed_at ?? null,
+    };
+  });
 
   const total = res.count ?? 0;
   return {
-    items: res.data ?? [],
+    items,
     page,
     pageSize,
     total,
     totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
+export async function getPetitionReviewBundle(petitionId: string) {
+  const user = await requireAppUser();
+  const supabase = createSupabaseServerClient();
+
+  let petitionRes: any = await supabase
+    .from('petitions')
+    .select(
+      'id, case_id, petition_type, court_template, body, confidence, lawyer_verified, created_at, review_status, current_version, review_notes, last_reviewed_at'
+    )
+    .eq('id', petitionId)
+    .eq('owner_user_id', user.userId)
+    .single();
+
+  if (petitionRes.error) {
+    petitionRes = (await supabase
+      .from('petitions')
+      .select('id, case_id, petition_type, court_template, body, confidence, lawyer_verified, created_at')
+      .eq('id', petitionId)
+      .eq('owner_user_id', user.userId)
+      .single()) as typeof petitionRes;
+  }
+
+  if (petitionRes.error && petitionRes.error.code !== 'PGRST116') {
+    console.error('[queries] petition review fetch error:', petitionRes.error.message);
+  }
+
+  let versionsRes: any = await supabase
+    .from('petition_versions')
+    .select('id, version, body, change_summary, review_action, created_at, created_by')
+    .eq('petition_id', petitionId)
+    .eq('owner_user_id', user.userId)
+    .order('version', { ascending: false })
+    .limit(25);
+
+  if (versionsRes.error) {
+    // Backward compatibility before version table migration.
+    versionsRes = { data: [], error: null, count: null, status: 200, statusText: 'OK' } as typeof versionsRes;
+  }
+
+  return {
+    petition: petitionRes.data
+      ? {
+          ...(petitionRes.data as Record<string, unknown>),
+          review_status: (petitionRes.data as { review_status?: string | null }).review_status ?? 'draft',
+          current_version: Math.max(
+            1,
+            ((petitionRes.data as { current_version?: number | null }).current_version ?? 1)
+          ),
+          review_notes: (petitionRes.data as { review_notes?: string | null }).review_notes ?? null,
+          last_reviewed_at:
+            (petitionRes.data as { last_reviewed_at?: string | null }).last_reviewed_at ?? null,
+        }
+      : null,
+    versions: versionsRes.data ?? [],
   };
 }
 

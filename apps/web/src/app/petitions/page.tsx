@@ -7,6 +7,14 @@ import { getPetitionsPage, getUserListPreferences } from '@/lib/queries';
 import { formatPercent } from '@/lib/utils';
 import { PaginationNav } from '@/components/ui/pagination-nav';
 
+function reviewStatusTone(status: string) {
+  if (status === 'approved') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
+  if (status === 'changes_requested') {
+    return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
+  }
+  return '';
+}
+
 export default async function PetitionsPage(props: {
   searchParams: Promise<{ page?: string; pageSize?: string }>;
 }) {
@@ -32,15 +40,25 @@ export default async function PetitionsPage(props: {
       </div>
       <div className="space-y-2">
         {petitionsPage.items.map((petition) => (
-          <div key={petition.id} className="rounded-xl border border-border bg-background p-3">
+          <Link
+            key={petition.id}
+            href={`/petitions/${petition.id}`}
+            className="block rounded-xl border border-border bg-background p-3 hover:border-primary/20 hover:bg-muted/50"
+          >
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium capitalize">{petition.petition_type.replace('_', ' ')}</p>
-              <Badge>{petition.court_template.replace('_', ' ')}</Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge className={reviewStatusTone(petition.review_status)}>
+                  {petition.review_status.replace('_', ' ')}
+                </Badge>
+                <Badge>{petition.court_template.replace('_', ' ')}</Badge>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Confidence {formatPercent(petition.confidence ?? 0)} \u2022 Case {petition.case_id.slice(0, 8)}...
+              Confidence {formatPercent(petition.confidence ?? 0)} \u2022 Version v{petition.current_version}{' '}
+              \u2022 Case {petition.case_id.slice(0, 8)}...
             </p>
-          </div>
+          </Link>
         ))}
         {petitionsPage.items.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-8 text-center">

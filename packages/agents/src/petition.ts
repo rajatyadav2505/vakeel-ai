@@ -20,6 +20,7 @@ export interface PetitionToolInput {
   jurisdiction?: string | null;
   parsedDocumentTexts?: string[];
   voiceTranscript?: string | null;
+  outputLanguage?: 'en-IN' | 'hi-IN';
   lawyerVerified: boolean;
   llmConfig?: RuntimeLlmConfig;
 }
@@ -42,6 +43,11 @@ export async function generateFormattedPetition(
   input: PetitionToolInput
 ): Promise<PetitionToolOutput> {
   requireLawyerVerification(input.lawyerVerified);
+  const outputLanguage = input.outputLanguage ?? 'en-IN';
+  const languageInstruction =
+    outputLanguage === 'hi-IN'
+      ? 'Draft the final petition in formal Hindi (Devanagari) while preserving legal terminology and citations exactly.'
+      : 'Draft the final petition in formal legal English used in Indian courts.';
 
   const legalResearchPacket = await buildLegalResearchPacket({
     caseId: input.caseId,
@@ -60,40 +66,76 @@ export async function generateFormattedPetition(
   const supportingAuthorities = legalResearchPacket.latestPrecedents.slice(0, 5);
 
   const fallbackTitle = `Draft ${input.petitionType.replace('_', ' ')} petition`;
-  const fallbackBody = [
-    `IN THE HON'BLE ${input.courtTemplate.replace('_', ' ').toUpperCase()} COURT`,
-    '',
-    'FACTS',
-    input.facts,
-    '',
-    'GROUNDS',
-    input.legalGrounds,
-    '',
-    'STATUTORY BASIS',
-    mustCiteStatutes.length
-      ? mustCiteStatutes.map((item) => `- ${item.title} (${item.sourceUrl})`).join('\n')
-      : '- [NO VERIFIED STATUTORY AUTHORITY FOUND]',
-    '',
-    'PRECEDENT SUPPORT',
-    mustCitePrecedents.length
-      ? mustCitePrecedents
-          .map((item) => `- ${item.caseName} (${item.court}, ${item.date}) - ${item.sourceUrl}`)
-          .join('\n')
-      : '- [NO VERIFIED PRECEDENT FOUND]',
-    '',
-    'LATEST PRECEDENTS CHECKED',
-    supportingAuthorities.length
-      ? supportingAuthorities
-          .map((item) => `- ${item.caseName} (${item.date}) - ${item.sourceUrl}`)
-          .join('\n')
-      : `- [NO VERIFIED RECENT PRECEDENT FOUND] (checked ${legalResearchPacket.precedentsCheckedAt})`,
-    '',
-    'PRAYER',
-    input.reliefSought,
-    '',
-    'VERIFICATION',
-    'This draft is AI-assisted. Licensed advocate review is mandatory before filing.',
-  ].join('\n');
+  const fallbackBody =
+    outputLanguage === 'hi-IN'
+      ? [
+          `माननीय ${input.courtTemplate.replace('_', ' ').toUpperCase()} न्यायालय के समक्ष`,
+          '',
+          'तथ्य',
+          input.facts,
+          '',
+          'विधिक आधार',
+          input.legalGrounds,
+          '',
+          'वैधानिक आधार',
+          mustCiteStatutes.length
+            ? mustCiteStatutes.map((item) => `- ${item.title} (${item.sourceUrl})`).join('\n')
+            : '- [सत्यापित वैधानिक प्राधिकरण उपलब्ध नहीं]',
+          '',
+          'नज़ीर समर्थन',
+          mustCitePrecedents.length
+            ? mustCitePrecedents
+                .map((item) => `- ${item.caseName} (${item.court}, ${item.date}) - ${item.sourceUrl}`)
+                .join('\n')
+            : '- [सत्यापित नज़ीर उपलब्ध नहीं]',
+          '',
+          'नवीनतम नज़ीर जाँच',
+          supportingAuthorities.length
+            ? supportingAuthorities
+                .map((item) => `- ${item.caseName} (${item.date}) - ${item.sourceUrl}`)
+                .join('\n')
+            : `- [सत्यापित हालिया नज़ीर उपलब्ध नहीं] (जांच ${legalResearchPacket.precedentsCheckedAt})`,
+          '',
+          'प्रार्थना',
+          input.reliefSought,
+          '',
+          'सत्यापन',
+          'यह मसौदा AI-सहायित है। दाखिल करने से पहले लाइसेंसधारी अधिवक्ता की समीक्षा अनिवार्य है।',
+        ].join('\n')
+      : [
+          `IN THE HON'BLE ${input.courtTemplate.replace('_', ' ').toUpperCase()} COURT`,
+          '',
+          'FACTS',
+          input.facts,
+          '',
+          'GROUNDS',
+          input.legalGrounds,
+          '',
+          'STATUTORY BASIS',
+          mustCiteStatutes.length
+            ? mustCiteStatutes.map((item) => `- ${item.title} (${item.sourceUrl})`).join('\n')
+            : '- [NO VERIFIED STATUTORY AUTHORITY FOUND]',
+          '',
+          'PRECEDENT SUPPORT',
+          mustCitePrecedents.length
+            ? mustCitePrecedents
+                .map((item) => `- ${item.caseName} (${item.court}, ${item.date}) - ${item.sourceUrl}`)
+                .join('\n')
+            : '- [NO VERIFIED PRECEDENT FOUND]',
+          '',
+          'LATEST PRECEDENTS CHECKED',
+          supportingAuthorities.length
+            ? supportingAuthorities
+                .map((item) => `- ${item.caseName} (${item.date}) - ${item.sourceUrl}`)
+                .join('\n')
+            : `- [NO VERIFIED RECENT PRECEDENT FOUND] (checked ${legalResearchPacket.precedentsCheckedAt})`,
+          '',
+          'PRAYER',
+          input.reliefSought,
+          '',
+          'VERIFICATION',
+          'This draft is AI-assisted. Licensed advocate review is mandatory before filing.',
+        ].join('\n');
 
   const llm = await invokeJsonModel<{ title?: string; body?: string; confidence?: number }>({
     systemPrompt: [
@@ -103,10 +145,12 @@ export async function generateFormattedPetition(
       'No legal proposition without authority.',
       'No invented sections or case citations.',
       'If authority is missing, explicitly write: [NO VERIFIED AUTHORITY FOUND - NEEDS HUMAN VERIFICATION].',
+      languageInstruction,
     ].join(' '),
     userPrompt: [
       `Petition type: ${input.petitionType}`,
       `Court template: ${input.courtTemplate}`,
+      `Preferred output language: ${outputLanguage}`,
       `Facts: ${input.facts}`,
       `Legal grounds: ${input.legalGrounds}`,
       `Relief sought: ${input.reliefSought}`,
@@ -123,8 +167,9 @@ export async function generateFormattedPetition(
 
   const title =
     typeof llm?.title === 'string' && llm.title.trim().length > 5 ? llm.title.trim() : fallbackTitle;
+  const verificationMarker = outputLanguage === 'hi-IN' ? 'सत्यापन' : 'VERIFICATION';
   const body =
-    typeof llm?.body === 'string' && llm.body.includes('VERIFICATION') ? llm.body : fallbackBody;
+    typeof llm?.body === 'string' && llm.body.includes(verificationMarker) ? llm.body : fallbackBody;
   const confidence =
     typeof llm?.confidence === 'number' && Number.isFinite(llm.confidence)
       ? Math.min(0.98, Math.max(0.25, Number(llm.confidence.toFixed(2))))

@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { runSingleAgentSimulation } from '@nyaya/agents';
-import { sendWhatsAppText } from '@/lib/whatsapp';
+import { sendWhatsAppInteractiveTemplate, sendWhatsAppText } from '@/lib/whatsapp';
 import { sanitizePlainText } from '@/lib/utils';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { requireAppUser } from '@/lib/auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-const schema = z.object({
-  to: z.string().min(8),
-  text: z.string().min(1).max(2400),
-  caseId: z.string().uuid().optional(),
-  legalQuery: z.string().min(5).max(1200).optional(),
-  groundedLegalReply: z.boolean().optional(),
-});
+const schema = z
+  .object({
+    to: z.string().min(8),
+    text: z.string().min(1).max(2400).optional(),
+    caseId: z.string().uuid().optional(),
+    legalQuery: z.string().min(5).max(1200).optional(),
+    groundedLegalReply: z.boolean().optional(),
+    templateId: z.enum(['case_update_ack', 'document_request', 'hearing_reminder']).optional(),
+    templateLocale: z.enum(['en-IN', 'hi-IN']).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.templateId && !value.text?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['text'],
+        message: 'Either text or templateId is required.',
+      });
+    }
+  });
 
 function deriveMessageId(response: unknown) {
   if (!response || typeof response !== 'object') return crypto.randomUUID();
@@ -40,9 +52,25 @@ export async function POST(request: NextRequest) {
     await enforceRateLimit(`wa-send:${user.userId}`, 40);
 
     const to = sanitizePlainText(payload.to);
-    let text = sanitizePlainText(payload.text);
+    let text = sanitizePlainText(payload.text ?? '');
+    let sendResponse: unknown;
+    let messageMode: 'text' | 'interactive_template' = 'text';
+    let templateMeta:
+      | {
+          templateId: 'case_update_ack' | 'document_request' | 'hearing_reminder';
+          locale: 'en-IN' | 'hi-IN';
+          fallbackToText: boolean;
+        }
+      | undefined;
 
     const shouldGroundReply = Boolean(payload.groundedLegalReply || payload.legalQuery);
+    if (shouldGroundReply && payload.templateId) {
+      return NextResponse.json(
+        { error: 'templateId cannot be combined with groundedLegalReply in the same request.' },
+        { status: 400 }
+      );
+    }
+
     if (shouldGroundReply) {
       if (!payload.caseId) {
         return NextResponse.json(
@@ -68,7 +96,7 @@ export async function POST(request: NextRequest) {
           .limit(10),
         supabase
           .from('user_settings')
-          .select('llm_provider,llm_model,llm_api_key,llm_base_url,free_tier_only')
+          .select('llm_provider,llm_model,llm_api_key,llm_base_url,free_tier_only,preferred_language')
           .eq('owner_user_id', user.userId)
           .maybeSingle(),
       ]);
@@ -84,12 +112,16 @@ export async function POST(request: NextRequest) {
             apiKey: settingsRes.data.llm_api_key ?? undefined,
             baseUrl: settingsRes.data.llm_base_url ?? undefined,
             freeTierOnly: settingsRes.data.free_tier_only ?? true,
+            outputLanguage:
+              settingsRes.data.preferred_language === 'hi-IN'
+                ? ('hi-IN' as const)
+                : ('en-IN' as const),
           }
         : undefined;
 
       const simulation = await runSingleAgentSimulation({
         caseId: caseRes.data.id,
-        objective: sanitizePlainText(payload.legalQuery ?? payload.text),
+        objective: sanitizePlainText(payload.legalQuery ?? payload.text ?? ''),
         facts: caseRes.data.summary,
         forum: caseRes.data.court_name ?? null,
         jurisdiction: caseRes.data.jurisdiction ?? null,
@@ -97,6 +129,7 @@ export async function POST(request: NextRequest) {
         parsedDocumentTexts: (docsRes.data ?? [])
           .map((item) => item.parsed_text)
           .filter((value): value is string => typeof value === 'string' && value.trim().length >= 20),
+        ...(llmConfig ? { outputLanguage: llmConfig.outputLanguage } : {}),
         ...(llmConfig ? { llmConfig } : {}),
       });
 
@@ -129,12 +162,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const response = await sendWhatsAppText({
-      to,
-      text,
-    });
+    if (payload.templateId) {
+      messageMode = 'interactive_template';
+      const locale = payload.templateLocale ?? 'en-IN';
+      const templateSend = await sendWhatsAppInteractiveTemplate({
+        to,
+        templateId: payload.templateId,
+        locale,
+      });
+      sendResponse = templateSend.response;
+      text = templateSend.resolved.text;
+      templateMeta = {
+        templateId: payload.templateId,
+        locale,
+        fallbackToText: templateSend.fallback,
+      };
+    } else {
+      sendResponse = await sendWhatsAppText({
+        to,
+        text,
+      });
+    }
 
-    const messageId = deriveMessageId(response);
+    const messageId = deriveMessageId(sendResponse);
     const supabase = createSupabaseServerClient();
     const enhancedInsert = await supabase.from('whatsapp_messages').insert({
       id: crypto.randomUUID(),
@@ -149,7 +199,9 @@ export async function POST(request: NextRequest) {
         direction: 'outbound',
         ownerUserId: user.userId,
         provider: 'gupshup',
-        providerResponse: response,
+        mode: messageMode,
+        ...(templateMeta ? { template: templateMeta } : {}),
+        providerResponse: sendResponse,
       },
     });
 
@@ -164,12 +216,14 @@ export async function POST(request: NextRequest) {
           direction: 'outbound',
           ownerUserId: user.userId,
           provider: 'gupshup',
-          providerResponse: response,
+          mode: messageMode,
+          ...(templateMeta ? { template: templateMeta } : {}),
+          providerResponse: sendResponse,
         },
       });
     }
 
-    return NextResponse.json({ ok: true, response, messageId });
+    return NextResponse.json({ ok: true, response: sendResponse, messageId, mode: messageMode, template: templateMeta });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 400 });
   }

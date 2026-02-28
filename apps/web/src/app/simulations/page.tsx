@@ -1,15 +1,15 @@
 import Link from 'next/link';
-import { BrainCircuit } from 'lucide-react';
+import { AlertCircle, BrainCircuit, LoaderCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { getSimulationsPage, getUserListPreferences } from '@/lib/queries';
+import { getSimulationJobsOverview, getSimulationsPage, getUserListPreferences } from '@/lib/queries';
 import { formatPercent, toOutcomeBand } from '@/lib/utils';
 import { SimulationScoringInfo } from '@/components/simulation-scoring-info';
 import { PaginationNav } from '@/components/ui/pagination-nav';
 
 export default async function SimulationsPage(props: {
-  searchParams: Promise<{ page?: string; pageSize?: string }>;
+  searchParams: Promise<{ page?: string; pageSize?: string; queuedJob?: string }>;
 }) {
   const preferences = await getUserListPreferences();
   const searchParams = await props.searchParams;
@@ -21,6 +21,7 @@ export default async function SimulationsPage(props: {
     : preferences.defaultPageSize;
 
   const simulationsPage = await getSimulationsPage({ page, pageSize });
+  const jobs = await getSimulationJobsOverview(8);
 
   return (
     <Card className="space-y-3">
@@ -28,6 +29,59 @@ export default async function SimulationsPage(props: {
         <h1 className="font-[Georgia] text-xl font-semibold">Evidence-based strategy analyses</h1>
         <SimulationScoringInfo />
       </div>
+      {searchParams.queuedJob && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-900/30 dark:text-emerald-300">
+          Simulation job queued: <span className="font-mono">{searchParams.queuedJob}</span>. Run
+          <code className="ml-1 rounded bg-background px-1 py-0.5">POST /api/simulations/worker</code> to process queued jobs.
+        </div>
+      )}
+      {jobs.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Queue-backed worker jobs</p>
+          {jobs.map((job) => (
+            <div key={job.id} className="rounded-xl border border-border bg-background p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">
+                  {job.mode} • {job.objective}
+                </p>
+                <Badge
+                  className={
+                    job.status === 'completed'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : job.status === 'failed'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                        : ''
+                  }
+                >
+                  {job.status}
+                </Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Attempts {job.attempts}
+                {job.status === 'processing' && (
+                  <span className="inline-flex items-center gap-1 pl-2">
+                    <LoaderCircle className="h-3 w-3 animate-spin" /> processing
+                  </span>
+                )}
+              </p>
+              {job.status === 'completed' && job.result_simulation_id && (
+                <Link
+                  href={`/simulations/${job.result_simulation_id}`}
+                  className="mt-1 inline-block text-xs text-primary underline-offset-4 hover:underline"
+                >
+                  Open completed simulation
+                </Link>
+              )}
+              {job.status === 'failed' && (
+                <p className="mt-1 inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-300">
+                  <AlertCircle className="h-3 w-3" />
+                  {job.last_error ?? 'Worker failed without an explicit error message.'}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="space-y-2">
         {simulationsPage.items.map((sim) => (
           <Link
