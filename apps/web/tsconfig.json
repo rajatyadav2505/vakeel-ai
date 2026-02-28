@@ -1,0 +1,36 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@nyaya/shared": [
+        "../../packages/shared/src/index.ts"
+      ],
+      "@nyaya/agents": [
+        "../../packages/agents/src/index.ts"
+      ],
+      "@/*": [
+        "./src/*"
+      ],
+      "@nyaya/shared/*": [
+        "../../packages/shared/src/*"
+      ],
+      "@nyaya/agents/*": [
+        "../../packages/agents/src/*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

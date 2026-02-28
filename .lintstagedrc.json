@@ -1,0 +1,8 @@
+{
+  "*.{ts,tsx,js,jsx,json,md}": [
+    "prettier --write"
+  ],
+  "apps/web/src/**/*.{ts,tsx}": [
+    "npm run lint --workspace=@nyaya/web"
+  ]
+}

@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #10263a;
+  --card: #ffffff;
+  --primary: #144f9c;
+  --primary-foreground: #f8fbff;
+  --border: #dbe3ef;
+  --muted: #eef3f9;
+  --muted-foreground: #536579;
+  --accent: #e0f2fe;
+  --accent-foreground: #0c4a6e;
+  --destructive: #dc2626;
+  --destructive-foreground: #fef2f2;
+  --ring: #144f9c;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: #020817;
+  --foreground: #e2e8f0;
+  --card: #0f172a;
+  --primary: #60a5fa;
+  --primary-foreground: #0f172a;
+  --border: #1e293b;
+  --muted: #0b1222;
+  --muted-foreground: #94a3b8;
+  --accent: #1e3a5f;
+  --accent-foreground: #bfdbfe;
+  --destructive: #ef4444;
+  --destructive-foreground: #450a0a;
+  --ring: #60a5fa;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Noto Sans", "Segoe UI", sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+* {
+  border-color: var(--border);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
