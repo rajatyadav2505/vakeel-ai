@@ -8,6 +8,7 @@ import type {
   StatutoryAuthority,
   Citation,
 } from '@nyaya/shared';
+import { z } from 'zod';
 import { invokeJsonModel, type RuntimeLlmConfig } from './llm';
 import { searchKanoon } from './tools';
 
@@ -15,6 +16,9 @@ const STATUTES_TTL_MS = 24 * 60 * 60 * 1000;
 const LEADING_PRECEDENTS_TTL_MS = 6 * 60 * 60 * 1000;
 const LATEST_PRECEDENTS_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_LATEST_LOOKBACK_MONTHS = 24;
+const issueRefinementSchema = z.object({
+  issues: z.array(z.string().min(1)).max(20).optional(),
+});
 
 interface CachedStatutes {
   fetchedAt: number;
@@ -872,7 +876,7 @@ async function maybeRefineIssuesWithLlm(params: {
   llmConfig?: RuntimeLlmConfig;
 }) {
   if (!params.llmConfig) return params.signals.issues;
-  const llm = await invokeJsonModel<{ issues?: string[] }>({
+  const llm = await invokeJsonModel({
     systemPrompt:
       'You are an Indian legal issue classifier. Return strict JSON only with key "issues" (snake_case issue tags).',
     userPrompt: [
@@ -884,6 +888,7 @@ async function maybeRefineIssuesWithLlm(params: {
     ].join('\n'),
     temperature: 0.1,
     maxTokens: 240,
+    schema: issueRefinementSchema,
     llmConfig: params.llmConfig,
   });
 

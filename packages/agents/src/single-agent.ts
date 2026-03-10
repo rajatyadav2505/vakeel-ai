@@ -1,4 +1,5 @@
 import type { Citation } from '@nyaya/shared';
+import { z } from 'zod';
 import { invokeJsonModel, type RuntimeLlmConfig } from './llm';
 import {
   buildLegalResearchPacket,
@@ -31,6 +32,11 @@ export interface SingleAgentOutput {
   legalGroundingStatus?: 'complete' | 'incomplete';
 }
 
+const singleAgentResponseSchema = z.object({
+  analysis: z.string().min(20).optional(),
+  confidence: z.number().finite().min(0).max(1).optional(),
+});
+
 export async function runSingleAgentSimulation(
   input: SingleAgentInput
 ): Promise<SingleAgentOutput> {
@@ -53,7 +59,7 @@ export async function runSingleAgentSimulation(
   });
   const citations = legalResearchPacketToCitations(legalResearchPacket);
 
-  const llm = await invokeJsonModel<{ analysis?: string; confidence?: number }>({
+  const llm = await invokeJsonModel({
     systemPrompt:
       [
         'You are a senior Indian litigation strategist.',
@@ -70,6 +76,7 @@ export async function runSingleAgentSimulation(
     ].join('\n'),
     temperature: 0.3,
     maxTokens: 700,
+    schema: singleAgentResponseSchema,
     ...(input.llmConfig ? { llmConfig: input.llmConfig } : {}),
   });
 

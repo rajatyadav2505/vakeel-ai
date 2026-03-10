@@ -18,6 +18,9 @@ const providerSchema = z.enum([
   'deepseek',
   'sarvam',
 ]);
+const llmConnectivitySchema = z.object({
+  status: z.string().min(1).optional(),
+});
 
 const schema = z.object({
   provider: providerSchema,
@@ -63,12 +66,13 @@ export async function POST(request: NextRequest) {
     }
 
     const startedAt = Date.now();
-    const result = await invokeJsonModel<{ status?: string }>({
+    const result = await invokeJsonModel({
       systemPrompt:
         'You are a connectivity check endpoint. Return strict JSON only: {"status":"ok"}.',
       userPrompt: 'Respond with {"status":"ok"}',
       temperature: 0,
       maxTokens: 80,
+      schema: llmConnectivitySchema,
       llmConfig: {
         provider: payload.provider,
         model: sanitizePlainText(payload.model),

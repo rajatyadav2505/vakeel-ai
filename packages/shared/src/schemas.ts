@@ -10,6 +10,54 @@ export const caseTypeSchema = z.enum([
   'consumer',
   'tax',
 ]);
+export const documentTypeSchema = z.enum([
+  'unknown',
+  'petition',
+  'affidavit',
+  'notice',
+  'order',
+  'agreement',
+  'postal_proof',
+  'receipt',
+  'annexure',
+  'evidence',
+  'audio_note',
+]);
+export const strategyEngineSchema = z.enum(['legacy', 'KAUTILYA_CERES']);
+export const strategyModeSchema = z.enum(['robust_mode', 'exploit_mode']);
+export const strategyComputeModeSchema = z.enum(['fast', 'standard', 'full']);
+export const kautilyaRoleSchema = z.enum([
+  'petitioner_or_plaintiff',
+  'respondent_or_defendant',
+  'judge_merits',
+  'judge_procedure',
+  'judge_citations',
+  'appellate_reviewer',
+  'clerk_verifier',
+  'strategist',
+]);
+export const kautilyaTacticSchema = z.enum(['SAMA', 'DANA', 'BHEDA', 'DANDA']);
+export const kautilyaPhaseSchema = z.enum([
+  'pre_litigation',
+  'interim_relief',
+  'pleadings',
+  'discovery',
+  'evidence',
+  'hearing',
+  'settlement',
+  'appeal',
+]);
+export const kautilyaMoveTypeSchema = z.enum([
+  'claim',
+  'rebuttal',
+  'application',
+  'cross_examination',
+  'evidence_request',
+  'settlement_offer',
+  'procedural_push',
+  'concession',
+  'order_draft',
+]);
 
 export const caseCreateSchema = z.object({
   title: z.string().min(5).max(180),
@@ -29,9 +77,9 @@ export const simulationRequestSchema = z.object({
   depth: z.number().int().min(5).max(12).default(7),
   includeMonteCarlo: z.boolean().default(true),
   includeChanakyaOverlay: z.boolean().default(true),
-  engineName: z.enum(['legacy', 'KAUTILYA_CERES']).default('legacy'),
-  strategyMode: z.enum(['robust_mode', 'exploit_mode']).default('robust_mode'),
-  computeMode: z.enum(['fast', 'standard', 'full']).default('standard'),
+  engineName: strategyEngineSchema.default('legacy'),
+  strategyMode: strategyModeSchema.default('robust_mode'),
+  computeMode: strategyComputeModeSchema.default('standard'),
 });
 
 export const petitionRequestSchema = z.object({

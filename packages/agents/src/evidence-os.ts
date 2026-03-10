@@ -1,15 +1,17 @@
-import type {
-  CaseEvidenceGraph,
-  CaseFact,
-  ChronologyEvent,
-  ContradictionIssue,
-  DocumentType,
-  EvidenceAnchor,
-  EvidenceBackedClaim,
-  MissingDocumentIssue,
-  NextDocumentSuggestion,
-  Citation,
+import {
+  documentTypeSchema,
+  type CaseEvidenceGraph,
+  type CaseFact,
+  type ChronologyEvent,
+  type ContradictionIssue,
+  type DocumentType,
+  type EvidenceAnchor,
+  type EvidenceBackedClaim,
+  type MissingDocumentIssue,
+  type NextDocumentSuggestion,
+  type Citation,
 } from '@nyaya/shared';
+import { z } from 'zod';
 import { invokeJsonModel } from './llm';
 import type { RuntimeLlmConfig } from './llm';
 
@@ -27,6 +29,50 @@ interface BuildEvidenceGraphInput {
   evidenceSources?: EvidenceSource[];
   llmConfig?: RuntimeLlmConfig;
 }
+
+const evidenceGraphRefinementSchema = z.object({
+  chronology: z
+    .array(
+      z.object({
+        title: z.string().min(1).optional(),
+        date: z.string().nullable().optional(),
+        details: z.string().min(1).optional(),
+      })
+    )
+    .max(24)
+    .optional(),
+  contradictions: z
+    .array(
+      z.object({
+        title: z.string().min(1).optional(),
+        description: z.string().min(1).optional(),
+        severity: z.enum(['low', 'medium', 'high']).optional(),
+      })
+    )
+    .max(24)
+    .optional(),
+  missingDocuments: z
+    .array(
+      z.object({
+        title: z.string().min(1).optional(),
+        requiredDocumentType: documentTypeSchema.optional(),
+        reason: z.string().min(1).optional(),
+        confidence: z.number().finite().min(0).max(1).optional(),
+      })
+    )
+    .max(24)
+    .optional(),
+  nextDocumentSuggestions: z
+    .array(
+      z.object({
+        documentType: documentTypeSchema.optional(),
+        reason: z.string().min(1).optional(),
+        priority: z.enum(['high', 'medium', 'low']).optional(),
+      })
+    )
+    .max(24)
+    .optional(),
+});
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
   const seen = new Set<string>();
@@ -456,12 +502,7 @@ async function refineWithLlm(params: {
 }): Promise<Partial<CaseEvidenceGraph> | null> {
   if (!params.input.llmConfig) return null;
 
-  const llm = await invokeJsonModel<{
-    chronology?: Array<{ title?: string; date?: string | null; details?: string }>;
-    contradictions?: Array<{ title?: string; description?: string; severity?: 'low' | 'medium' | 'high' }>;
-    missingDocuments?: Array<{ title?: string; requiredDocumentType?: DocumentType; reason?: string; confidence?: number }>;
-    nextDocumentSuggestions?: Array<{ documentType?: DocumentType; reason?: string; priority?: 'high' | 'medium' | 'low' }>;
-  }>({
+  const llm = await invokeJsonModel({
     systemPrompt: [
       'You are an evidence operations analyst for Indian litigation.',
       'Return strict JSON only.',
@@ -474,6 +515,7 @@ async function refineWithLlm(params: {
     ].join('\n\n'),
     temperature: 0.15,
     maxTokens: 1600,
+    schema: evidenceGraphRefinementSchema,
     llmConfig: params.input.llmConfig,
   });
 

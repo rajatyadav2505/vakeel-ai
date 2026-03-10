@@ -18,6 +18,8 @@ import type {
   StrategyMode,
   StrategyOutput,
 } from '@nyaya/shared';
+import { kautilyaMoveTypeSchema, kautilyaTacticSchema } from '@nyaya/shared';
+import { z } from 'zod';
 import { buildEvidenceBackedClaims, toProbabilityBand } from './evidence-os';
 import { invokeJsonModel, type RuntimeLlmConfig } from './llm';
 import { calculateGameTheory, simulateBranchSeeded } from './tools';
@@ -46,6 +48,22 @@ export interface KautilyaCeresInput {
 }
 
 const TACTIC_ORDER: KautilyaTactic[] = ['SAMA', 'DANA', 'BHEDA', 'DANDA'];
+const llmMoveDraftSchema = z.object({
+  moves: z
+    .array(
+      z.object({
+        tactic: kautilyaTacticSchema,
+        move_type: kautilyaMoveTypeSchema,
+        target_issue_id: z.string().min(1),
+        claim: z.string().min(1),
+        evidence_ids: z.array(z.string().min(1)).max(20).optional(),
+        authority_ids: z.array(z.string().min(1)).max(20).optional(),
+        confidence: z.number().finite().min(0).max(1).optional(),
+      })
+    )
+    .max(24)
+    .optional(),
+});
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -295,17 +313,7 @@ async function generateLlmMoveCandidates(params: {
   compiled: Awaited<ReturnType<typeof compileKautilyaCaseGraph>>;
   llmConfig?: RuntimeLlmConfig;
 }): Promise<KautilyaStructuredMove[]> {
-  const llm = await invokeJsonModel<{
-    moves?: Array<{
-      tactic?: KautilyaTactic;
-      move_type?: KautilyaStructuredMove['move_type'];
-      target_issue_id?: string;
-      claim?: string;
-      evidence_ids?: string[];
-      authority_ids?: string[];
-      confidence?: number;
-    }>;
-  }>({
+  const llm = await invokeJsonModel({
     systemPrompt: [
       'You are a litigation move generator for KAUTILYA_CERES.',
       'Return strict JSON only.',
@@ -327,6 +335,7 @@ async function generateLlmMoveCandidates(params: {
     ].join('\n\n'),
     temperature: 0.25,
     maxTokens: 1200,
+    schema: llmMoveDraftSchema,
     ...(params.llmConfig ? { llmConfig: params.llmConfig } : {}),
   });
 

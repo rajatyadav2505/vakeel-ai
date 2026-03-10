@@ -253,9 +253,15 @@ export interface CaseRecord {
   stage: CaseStage;
   courtName: string | null;
   summary: string;
+  summaryEncrypted: string | null;
   clientName: string | null;
   opponentName: string | null;
   jurisdiction: string | null;
+  intakePdfPath: string | null;
+  intakeVoicePath: string | null;
+  voiceTranscript: string | null;
+  lawyerVerifiedForExport: boolean;
+  searchEmbedding: number[] | null;
   createdAt: string;
   updatedAt: string;
 }

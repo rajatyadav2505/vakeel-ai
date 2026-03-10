@@ -36,13 +36,20 @@ const envSchema = z.object({
   WHATSAPP_WEBHOOK_SECRET: z.string().optional(),
 });
 
+type Env = z.infer<typeof envSchema>;
+
+const allowPlaceholderDefaults = process.env.NODE_ENV !== 'production';
+
 const raw = {
   NEXT_PUBLIC_SUPABASE_URL:
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://example.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_URL
+    ?? (allowPlaceholderDefaults ? 'https://example.supabase.co' : undefined),
   NEXT_PUBLIC_SUPABASE_ANON_KEY:
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'replace-with-real-anon-key-0000000000',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    ?? (allowPlaceholderDefaults ? 'replace-with-real-anon-key-0000000000' : undefined),
   SUPABASE_SERVICE_ROLE_KEY:
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'replace-with-real-service-key-0000000000',
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+    ?? (allowPlaceholderDefaults ? 'replace-with-real-service-key-0000000000' : undefined),
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   INDIANKANOON_API_TOKEN: process.env.INDIANKANOON_API_TOKEN,
@@ -75,9 +82,19 @@ const raw = {
   WHATSAPP_WEBHOOK_SECRET: process.env.WHATSAPP_WEBHOOK_SECRET,
 };
 
-const parsed = envSchema.safeParse(raw);
-if (!parsed.success) {
-  console.warn('[env] Invalid env configuration. Using placeholder defaults for local scaffolding.');
+function formatEnvIssues(error: z.ZodError) {
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || 'env'}: ${issue.message}`)
+    .join('; ');
 }
 
-export const env = parsed.success ? parsed.data : raw;
+const parsed = envSchema.safeParse(raw);
+if (!parsed.success) {
+  const message = `[env] Invalid env configuration: ${formatEnvIssues(parsed.error)}`;
+  if (!allowPlaceholderDefaults) {
+    throw new Error(message);
+  }
+  console.warn(`${message}. Using placeholder defaults for local scaffolding.`);
+}
+
+export const env: Env = parsed.success ? parsed.data : (raw as Env);

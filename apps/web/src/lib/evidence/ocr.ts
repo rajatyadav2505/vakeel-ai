@@ -12,6 +12,7 @@ export interface OcrAttempt {
   status: 'succeeded' | 'failed' | 'skipped';
   detail: string;
   durationMs: number;
+  retryable?: boolean;
 }
 
 export interface OcrExtractionResult {
@@ -20,6 +21,8 @@ export interface OcrExtractionResult {
   method: OcrMethod;
   attempts: OcrAttempt[];
 }
+
+class OcrTransientError extends Error {}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -144,6 +147,17 @@ async function safeJson(response: Response): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+function isRetryableOcrError(error: unknown) {
+  if (error instanceof OcrTransientError) return true;
+  if (!(error instanceof Error)) return false;
+  return error.name === 'AbortError' || error instanceof TypeError;
+}
+
+function toOcrTransientError(error: unknown, detail: string) {
+  const reason = error instanceof Error ? error.message : String(error);
+  return new OcrTransientError(`${detail}: ${reason}`);
 }
 
 async function extractSarvamDocumentText(params: {
@@ -286,22 +300,30 @@ async function extractSarvamDocumentText(params: {
     `${SARVAM_BASE_URL}/document-intelligence/${encodeURIComponent(jobId)}/result`,
   ];
 
+  let lastTransientError: OcrTransientError | null = null;
   for (const candidateUrl of candidateUrls) {
-    const response = await fetchWithTimeout(
-      candidateUrl,
-      {
-        method: 'GET',
-        ...(candidateUrl.startsWith(SARVAM_BASE_URL)
-          ? {
-              headers: {
-                'api-subscription-key': apiKey,
-              },
-            }
-          : {}),
-      },
-      20_000
-    ).catch(() => null);
-    if (!response || !response.ok) continue;
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(
+        candidateUrl,
+        {
+          method: 'GET',
+          ...(candidateUrl.startsWith(SARVAM_BASE_URL)
+            ? {
+                headers: {
+                  'api-subscription-key': apiKey,
+                },
+              }
+            : {}),
+        },
+        20_000
+      );
+    } catch (error) {
+      lastTransientError = toOcrTransientError(error, `Failed to fetch OCR output from ${candidateUrl}`);
+      continue;
+    }
+
+    if (!response.ok) continue;
 
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -316,6 +338,10 @@ async function extractSarvamDocumentText(params: {
       if (text) return text;
       continue;
     }
+  }
+
+  if (lastTransientError) {
+    throw lastTransientError;
   }
 
   return null;
@@ -446,11 +472,13 @@ export async function extractTextWithManagedOcr(params: {
         durationMs: Date.now() - started,
       });
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
       attempts.push({
         provider,
         status: 'failed',
-        detail: String(error),
+        detail,
         durationMs: Date.now() - started,
+        ...(isRetryableOcrError(error) ? { retryable: true } : {}),
       });
     }
   }

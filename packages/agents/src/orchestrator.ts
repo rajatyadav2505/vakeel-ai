@@ -1,4 +1,5 @@
 import type { Citation, StrategyOutput, SimulationProposal, SimulationStep } from '@nyaya/shared';
+import { z } from 'zod';
 import {
   applyChanakyaPrinciples,
   calculateGameTheory,
@@ -37,6 +38,37 @@ interface GeneratedProposal {
   riskScore: number;
   payoffBias: number;
 }
+
+const defectProbabilitySchema = z.object({
+  opponentDefectProbability: z.number().finite().min(0).max(1).optional(),
+});
+
+const generatedProposalsSchema = z.object({
+  proposals: z
+    .array(
+      z.object({
+        agentId: z.string().min(1),
+        move: z.string().min(1),
+        rationale: z.string().min(1),
+        riskScore: z.number().finite(),
+        payoffBias: z.number().finite(),
+      })
+    )
+    .max(40)
+    .optional(),
+});
+
+const groundedClaimDraftSchema = z.object({
+  claims: z
+    .array(
+      z.object({
+        statement: z.string().min(1).optional(),
+        issueTag: z.string().min(1).optional(),
+      })
+    )
+    .max(12)
+    .optional(),
+});
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -150,7 +182,7 @@ async function inferOpponentDefectProbability(params: {
   llmConfig?: RuntimeLlmConfig;
 }) {
   const heuristic = estimateDefectProbabilityHeuristic(params);
-  const llm = await invokeJsonModel<{ opponentDefectProbability?: number }>({
+  const llm = await invokeJsonModel({
     systemPrompt:
       'You are a litigation game-theory analyst. Return strict JSON with key opponentDefectProbability in [0,1].',
     userPrompt: [
@@ -162,6 +194,7 @@ async function inferOpponentDefectProbability(params: {
     ].join('\n'),
     temperature: 0.2,
     maxTokens: 180,
+    schema: defectProbabilitySchema,
     ...(params.llmConfig ? { llmConfig: params.llmConfig } : {}),
   });
 
@@ -297,7 +330,7 @@ async function generateAgentProposals(params: {
     ])
   );
 
-  const llm = await invokeJsonModel<{ proposals?: GeneratedProposal[] }>({
+  const llm = await invokeJsonModel({
     systemPrompt: [
       'You are a legal war-room orchestrator.',
       'Return STRICT JSON with key "proposals" (array).',
@@ -319,6 +352,7 @@ async function generateAgentProposals(params: {
     ].join('\n'),
     temperature: 0.45,
     maxTokens: 1600,
+    schema: generatedProposalsSchema,
     ...(params.llmConfig ? { llmConfig: params.llmConfig } : {}),
   });
 
@@ -445,9 +479,7 @@ export async function runOrchestratedWarGame(input: OrchestratorInput): Promise<
         citations,
       });
 
-      const legalClaimsDraft = await invokeJsonModel<{
-        claims?: Array<{ statement?: string; issueTag?: string }>;
-      }>({
+      const legalClaimsDraft = await invokeJsonModel({
         systemPrompt: [
           'You are an Indian legal grounding analyst.',
           'Return strict JSON with key "claims" only.',
@@ -465,6 +497,7 @@ export async function runOrchestratedWarGame(input: OrchestratorInput): Promise<
         ].join('\n\n'),
         temperature: 0.15,
         maxTokens: 700,
+        schema: groundedClaimDraftSchema,
         ...(input.llmConfig ? { llmConfig: input.llmConfig } : {}),
       });
 

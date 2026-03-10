@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENROUTER_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -31,31 +33,39 @@ export interface RuntimeLlmConfig {
   freeTierOnly?: boolean;
 }
 
-function parseJson<T>(value: string): T | null {
+function parseJson(value: string): unknown | null {
   try {
-    return JSON.parse(value) as T;
+    return JSON.parse(value) as unknown;
   } catch {
     return null;
   }
 }
 
-function parseJsonFromText<T>(value: string): T | null {
-  const direct = parseJson<T>(value);
+function parseJsonFromText(value: string): unknown | null {
+  const direct = parseJson(value);
   if (direct) return direct;
 
   const fenced = value.match(/```json\s*([\s\S]*?)\s*```/i)?.[1];
   if (fenced) {
-    const parsedFence = parseJson<T>(fenced.trim());
+    const parsedFence = parseJson(fenced.trim());
     if (parsedFence) return parsedFence;
   }
 
   const firstBrace = value.indexOf('{');
   const lastBrace = value.lastIndexOf('}');
   if (firstBrace >= 0 && lastBrace > firstBrace) {
-    return parseJson<T>(value.slice(firstBrace, lastBrace + 1));
+    return parseJson(value.slice(firstBrace, lastBrace + 1));
   }
 
   return null;
+}
+
+function parseStructuredJson<T>(value: string, schema: z.ZodType<T>): T | null {
+  const parsed = parseJsonFromText(value);
+  if (parsed === null) return null;
+
+  const validated = schema.safeParse(parsed);
+  return validated.success ? validated.data : null;
 }
 
 function extractTextContent(content: unknown): string {
@@ -243,6 +253,7 @@ async function invokeOpenAiCompatible<T>(params: {
   temperature: number;
   maxTokens: number;
   signal: AbortSignal;
+  schema: z.ZodType<T>;
 }): Promise<T | null> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -296,7 +307,7 @@ async function invokeOpenAiCompatible<T>(params: {
   const text = extractTextContent(content);
   if (!text) return null;
 
-  return parseJsonFromText<T>(text.trim());
+  return parseStructuredJson(text.trim(), params.schema);
 }
 
 async function invokeAnthropic<T>(params: {
@@ -308,6 +319,7 @@ async function invokeAnthropic<T>(params: {
   temperature: number;
   maxTokens: number;
   signal: AbortSignal;
+  schema: z.ZodType<T>;
 }): Promise<T | null> {
   const response = await fetch(params.endpoint, {
     method: 'POST',
@@ -340,7 +352,7 @@ async function invokeAnthropic<T>(params: {
       .trim() ?? '';
 
   if (!text) return null;
-  return parseJsonFromText<T>(text);
+  return parseStructuredJson(text, params.schema);
 }
 
 async function invokeGeminiNative<T>(params: {
@@ -351,6 +363,7 @@ async function invokeGeminiNative<T>(params: {
   temperature: number;
   maxTokens: number;
   signal: AbortSignal;
+  schema: z.ZodType<T>;
 }): Promise<T | null> {
   const endpoint = `${GEMINI_NATIVE_BASE_URL}/models/${encodeURIComponent(params.model)}:generateContent?key=${encodeURIComponent(params.apiKey)}`;
   const response = await fetch(endpoint, {
@@ -398,7 +411,7 @@ async function invokeGeminiNative<T>(params: {
       .trim() ?? '';
 
   if (!text) return null;
-  return parseJsonFromText<T>(text);
+  return parseStructuredJson(text, params.schema);
 }
 
 export async function invokeJsonModel<T>(params: {
@@ -407,6 +420,7 @@ export async function invokeJsonModel<T>(params: {
   temperature?: number;
   maxTokens?: number;
   llmConfig?: RuntimeLlmConfig;
+  schema: z.ZodType<T>;
 }): Promise<T | null> {
   const provider = params.llmConfig?.provider ?? 'sarvam';
   const model = params.llmConfig?.model?.trim() || defaultModelForProvider(provider);
@@ -442,6 +456,7 @@ export async function invokeJsonModel<T>(params: {
         temperature,
         maxTokens,
         signal: controller.signal,
+        schema: params.schema,
       });
     }
 
@@ -459,6 +474,7 @@ export async function invokeJsonModel<T>(params: {
       temperature,
       maxTokens,
       signal: controller.signal,
+      schema: params.schema,
     });
 
     if (compatResult) return compatResult;
@@ -472,6 +488,7 @@ export async function invokeJsonModel<T>(params: {
         temperature,
         maxTokens,
         signal: controller.signal,
+        schema: params.schema,
       });
     }
 

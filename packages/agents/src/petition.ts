@@ -1,5 +1,6 @@
 import type { Citation, GroundedLegalClaim, LegalResearchPacket, PrecedentAuthority, StatutoryAuthority } from '@nyaya/shared';
 import { requireLawyerVerification } from '@nyaya/shared';
+import { z } from 'zod';
 import { invokeJsonModel, type RuntimeLlmConfig } from './llm';
 import {
   buildLegalResearchPacket,
@@ -38,6 +39,12 @@ export interface PetitionToolOutput {
   unverifiedClaims: GroundedLegalClaim[];
   legalGroundingStatus: 'complete' | 'incomplete';
 }
+
+const petitionDraftSchema = z.object({
+  title: z.string().min(3).optional(),
+  body: z.string().min(20).optional(),
+  confidence: z.number().finite().min(0).max(1).optional(),
+});
 
 export async function generateFormattedPetition(
   input: PetitionToolInput
@@ -137,7 +144,7 @@ export async function generateFormattedPetition(
           'This draft is AI-assisted. Licensed advocate review is mandatory before filing.',
         ].join('\n');
 
-  const llm = await invokeJsonModel<{ title?: string; body?: string; confidence?: number }>({
+  const llm = await invokeJsonModel({
     systemPrompt: [
       'You draft Indian legal petitions.',
       'Return strict JSON with keys: title, body, confidence.',
@@ -162,6 +169,7 @@ export async function generateFormattedPetition(
     ].join('\n'),
     temperature: 0.25,
     maxTokens: 1800,
+    schema: petitionDraftSchema,
     ...(input.llmConfig ? { llmConfig: input.llmConfig } : {}),
   });
 

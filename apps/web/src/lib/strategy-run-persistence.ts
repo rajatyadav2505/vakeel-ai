@@ -1,5 +1,20 @@
-import type { KautilyaStrategyCard, StrategyOutput } from '@nyaya/shared';
+import {
+  kautilyaMoveTypeSchema,
+  kautilyaPhaseSchema,
+  kautilyaRoleSchema,
+  kautilyaTacticSchema,
+  type KautilyaStrategyCard,
+  type StrategyOutput,
+} from '@nyaya/shared';
+import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+
+const strategyTurnFieldSchema = z.object({
+  role: kautilyaRoleSchema,
+  phase: kautilyaPhaseSchema,
+  tactic: kautilyaTacticSchema,
+  move_type: kautilyaMoveTypeSchema,
+});
 
 function uniqueCards(output: NonNullable<StrategyOutput['kautilyaCeres']>) {
   const seen = new Set<string>();
@@ -139,16 +154,23 @@ export async function persistKautilyaStrategyRun(params: {
 
     card.structuredMoves.forEach((move, index) => {
       const turnId = crypto.randomUUID();
+      const validatedMove = strategyTurnFieldSchema.parse({
+        role: move.role,
+        phase: move.phase,
+        tactic: move.tactic,
+        move_type: move.move_type,
+      });
+
       turnRows.push({
         id: turnId,
         run_id: runId,
         owner_user_id: params.ownerUserId,
         strategy_id: card.id,
-        role: move.role,
+        role: validatedMove.role,
         turn_index: index + 1,
-        phase: move.phase,
-        tactic: move.tactic,
-        move_type: move.move_type,
+        phase: validatedMove.phase,
+        tactic: validatedMove.tactic,
+        move_type: validatedMove.move_type,
         target_issue_id: move.target_issue_id,
         claim: move.claim,
         expected_utility: move.expected_utility,
