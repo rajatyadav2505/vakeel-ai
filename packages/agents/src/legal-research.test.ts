@@ -28,27 +28,37 @@ function mockStatute(id: string, issueTag: string): StatutoryAuthority {
   };
 }
 
-function mockPrecedent(id: string, issueTag: string, date: string): PrecedentAuthority {
+function mockPrecedent(
+  id: string,
+  issueTag: string,
+  date: string,
+  overrides?: Partial<PrecedentAuthority>
+): PrecedentAuthority {
   return {
     id,
     authorityType: 'precedent',
     source: 'ecourts',
-    sourceUrl: `https://example.org/precedent/${id}`,
-    title: `Mock precedent ${id}`,
-    proposition: `Holding for ${issueTag}`,
-    issueTags: [issueTag],
-    relevanceScore: 0.78,
-    courtPriorityScore: 0.87,
-    freshnessScore: 0.74,
-    overallScore: 0.8,
-    retrievedAt: '2026-02-28T00:00:00.000Z',
-    verified: true,
-    caseName: `Mock v State (${id})`,
-    court: 'Delhi High Court',
-    date,
-    citationText: `Mock citation ${id}`,
-    forumFitScore: 0.6,
-    jurisdictionFitScore: 0.6,
+    sourceUrl: overrides?.sourceUrl ?? `https://example.org/precedent/${id}`,
+    title: overrides?.title ?? `Mock precedent ${id}`,
+    proposition: overrides?.proposition ?? `Holding for ${issueTag}`,
+    issueTags: overrides?.issueTags ?? [issueTag],
+    relevanceScore: overrides?.relevanceScore ?? 0.78,
+    courtPriorityScore: overrides?.courtPriorityScore ?? 0.87,
+    freshnessScore: overrides?.freshnessScore ?? 0.74,
+    overallScore: overrides?.overallScore ?? 0.8,
+    retrievedAt: overrides?.retrievedAt ?? '2026-02-28T00:00:00.000Z',
+    verified: overrides?.verified ?? true,
+    caseName: overrides?.caseName ?? `Mock v State (${id})`,
+    court: overrides?.court ?? 'Delhi High Court',
+    date: overrides?.date ?? date,
+    citationText: overrides?.citationText ?? `Mock citation ${id}`,
+    forumFitScore: overrides?.forumFitScore ?? 0.6,
+    jurisdictionFitScore: overrides?.jurisdictionFitScore ?? 0.6,
+    ...(overrides?.neutralCitation ? { neutralCitation: overrides.neutralCitation } : {}),
+    ...(overrides?.caseNumber ? { caseNumber: overrides.caseNumber } : {}),
+    ...(overrides?.paragraphRefs ? { paragraphRefs: overrides.paragraphRefs } : {}),
+    ...(overrides?.pageRefs ? { pageRefs: overrides.pageRefs } : {}),
+    ...(overrides?.isDateInferred ? { isDateInferred: overrides.isDateInferred } : {}),
   };
 }
 
@@ -147,5 +157,113 @@ describe('legal research packet', () => {
     );
 
     expect(legalGroundingStatus(packet, 0.55)).toBe('incomplete');
+  });
+
+  it('rejects cross-topic statute contamination for injunction and residence disputes', async () => {
+    const packet = await buildLegalResearchPacket(
+      {
+        caseId: crypto.randomUUID(),
+        summary:
+          'Civil suit for temporary injunction over possession of self-acquired residential property. Defendant claims shared household rights and senior citizen parents seek protection of property.',
+        objective: 'Identify the clean statutory framework for interim relief and residence issues.',
+        forum: 'District Civil Court',
+        jurisdiction: 'State Forum',
+      },
+      {
+        precedentAdapters: [],
+      }
+    );
+
+    const titles = packet.statutoryAuthorities.map((item) => item.title);
+    expect(titles.some((title) => /negotiable instruments/i.test(title))).toBe(false);
+    expect(titles.some((title) => /order xxxix|order 39/i.test(title))).toBe(true);
+    expect(
+      titles.some((title) => /domestic violence act|senior citizens act/i.test(title))
+    ).toBe(true);
+  });
+
+  it('rejects off-topic precedents while keeping relevant injunction authorities', async () => {
+    const mixedPrecedentAdapter: PrecedentSourceAdapter = {
+      id: 'mixed-precedents',
+      async search() {
+        return [
+          mockPrecedent('ni-138', 'cheque_bounce', '2024-04-02', {
+            title: 'M/s Acme v State - Section 138 Negotiable Instruments Act',
+            caseName: 'M/s Acme v State',
+            proposition: 'Dishonour of cheque under Section 138 NI Act and notice timelines.',
+            citationText: 'Section 138 NI Act',
+          }),
+          mockPrecedent('inj-1', 'injunction_relief', '2024-08-10', {
+            title: 'Dalpat Kumar v Prahlad Singh',
+            caseName: 'Dalpat Kumar v Prahlad Singh',
+            proposition:
+              'Temporary injunction requires prima facie case, balance of convenience, and irreparable injury in possession disputes.',
+            citationText: 'Dalpat Kumar v Prahlad Singh',
+            court: 'Supreme Court of India',
+          }),
+        ];
+      },
+    };
+
+    const packet = await buildLegalResearchPacket(
+      {
+        caseId: crypto.randomUUID(),
+        summary:
+          'Plaintiff seeks temporary injunction to protect possession of residential property and maintain status quo pending trial.',
+        objective: 'Find the strongest interim injunction authorities.',
+        forum: 'District Civil Court',
+        jurisdiction: 'State Forum',
+      },
+      {
+        statuteAdapters: [statuteAdapter],
+        precedentAdapters: [mixedPrecedentAdapter],
+      }
+    );
+
+    const titles = packet.leadingPrecedents.map((item) => item.title);
+    expect(titles).toContain('Dalpat Kumar v Prahlad Singh');
+    expect(titles.some((title) => /negotiable instruments|section 138/i.test(title))).toBe(false);
+  });
+
+  it('preserves negotiable-instruments authorities for cheque dishonour matters', async () => {
+    const mixedPrecedentAdapter: PrecedentSourceAdapter = {
+      id: 'mixed-cheque-precedents',
+      async search() {
+        return [
+          mockPrecedent('ni-138', 'cheque_bounce', '2024-04-02', {
+            title: 'M/s Acme v State - Section 138 Negotiable Instruments Act',
+            caseName: 'M/s Acme v State',
+            proposition: 'Dishonour of cheque under Section 138 NI Act and statutory notice compliance.',
+            citationText: 'Section 138 NI Act',
+            court: 'Supreme Court of India',
+          }),
+          mockPrecedent('inj-1', 'injunction_relief', '2024-08-10', {
+            title: 'Dalpat Kumar v Prahlad Singh',
+            caseName: 'Dalpat Kumar v Prahlad Singh',
+            proposition:
+              'Temporary injunction requires prima facie case, balance of convenience, and irreparable injury in possession disputes.',
+            citationText: 'Dalpat Kumar v Prahlad Singh',
+          }),
+        ];
+      },
+    };
+
+    const packet = await buildLegalResearchPacket(
+      {
+        caseId: crypto.randomUUID(),
+        summary:
+          'Cheque dishonour complaint under Section 138 of the Negotiable Instruments Act. Statutory notice was issued within time and maintainability is disputed.',
+        objective: 'Assess NI Act maintainability and limitation.',
+        forum: 'Metropolitan Magistrate',
+        jurisdiction: 'Delhi',
+      },
+      {
+        precedentAdapters: [mixedPrecedentAdapter],
+      }
+    );
+
+    expect(packet.statutoryAuthorities.some((item) => /negotiable instruments/i.test(item.title))).toBe(true);
+    expect(packet.leadingPrecedents.some((item) => /section 138/i.test(item.title))).toBe(true);
+    expect(packet.leadingPrecedents.some((item) => /dalpat kumar/i.test(item.title))).toBe(false);
   });
 });
