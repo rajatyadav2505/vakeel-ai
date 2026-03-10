@@ -1,7 +1,7 @@
 import { runKautilyaCeresWarGame, runOrchestratedWarGame, runSingleAgentSimulation } from '@nyaya/agents';
 import type { DocumentType } from '@nyaya/shared';
 import { resolveRuntimeLlmConfig } from '@/lib/llm-settings';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { persistKautilyaStrategyRun } from '@/lib/strategy-run-persistence';
 
 interface SimulationJobRow {
@@ -57,7 +57,7 @@ function toDocumentType(value: string): DocumentType {
 }
 
 async function getCaseContext(caseId: string, ownerUserId: string): Promise<CaseContext> {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const [res, docs] = await Promise.all([
     supabase
       .from('cases')
@@ -93,7 +93,7 @@ async function getCaseContext(caseId: string, ownerUserId: string): Promise<Case
 }
 
 async function getUserLlmConfig(userId: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const settings = await supabase
     .from('user_settings')
     .select('llm_provider,llm_model,llm_api_key,llm_base_url,free_tier_only,preferred_language')
@@ -115,7 +115,7 @@ async function insertAuditLog(params: {
   response: string;
   confidence: number;
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   await supabase.from('ai_audit_logs').insert({
     id: crypto.randomUUID(),
     case_id: params.caseId,
@@ -134,7 +134,7 @@ async function markJobStatus(params: {
   resultSimulationId?: string | null;
   errorMessage?: string | null;
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   await supabase
     .from('simulation_jobs')
     .update({
@@ -167,7 +167,7 @@ async function processSingleJob(job: SimulationJobRow) {
       ...(llmConfig ? { llmConfig } : {}),
     });
 
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseAdminClient();
     const simulationId = crypto.randomUUID();
     await supabase.from('simulations').insert({
       id: simulationId,
@@ -230,7 +230,7 @@ async function processSingleJob(job: SimulationJobRow) {
           ...(llmConfig ? { llmConfig } : {}),
         });
 
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const simulationId = crypto.randomUUID();
   await supabase.from('simulations').insert({
     id: simulationId,
@@ -267,7 +267,7 @@ async function processSingleJob(job: SimulationJobRow) {
 
 export async function processSimulationQueue(params?: { limit?: number }) {
   const limit = Math.max(1, Math.min(10, params?.limit ?? 3));
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const queuedRes = await supabase.rpc('claim_simulation_jobs', {
     job_limit: limit,
   });

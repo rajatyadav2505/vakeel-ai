@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { fetchEcourtsCaseSnapshot } from '@/lib/ecourts';
 
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const user = await requireAppUser();
     await enforceRateLimit(`ecourts-sync:${user.userId}`, 120);
     const payload = schema.parse(await request.json());
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
     const fetched = await fetchEcourtsCaseSnapshot(payload.cnrNumber);
 
     if (!fetched.configured) {
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
           error:
             'Live e-Courts adapter is not configured. Set ECOURTS_CASE_STATUS_URL to enable sync.',
         },
-        { status: 503 }
+        { status: 503 },
       );
     }
 
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
           status: 'failed',
           message: 'No usable case data was returned by the configured e-Courts adapter.',
         },
-        { status: 502 }
+        { status: 502 },
       );
     }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { sanitizePlainText } from '@/lib/utils';
 
@@ -24,17 +24,14 @@ type PetitionRow = {
   current_version?: number | null;
 };
 
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireAppUser();
     await enforceRateLimit(`petition-review:${user.userId}`, 120);
 
     const params = paramsSchema.parse(await context.params);
     const payload = reviewSchema.parse(await request.json());
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
     const petitionRes = await supabase
       .from('petitions')
@@ -57,12 +54,16 @@ export async function PATCH(
     if (payload.action === 'approve' && !payload.lawyerVerified) {
       return NextResponse.json(
         { error: 'lawyerVerified=true is required to approve a petition.' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const reviewStatus =
-      payload.action === 'approve' ? 'approved' : payload.action === 'request_changes' ? 'changes_requested' : 'draft';
+      payload.action === 'approve'
+        ? 'approved'
+        : payload.action === 'request_changes'
+          ? 'changes_requested'
+          : 'draft';
     const reviewAction =
       payload.action === 'approve'
         ? 'approved'
@@ -90,7 +91,7 @@ export async function PATCH(
     if (petitionUpdate.error || !petitionUpdate.data) {
       return NextResponse.json(
         { error: 'Failed to update petition review state. Run latest migrations and retry.' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -113,7 +114,7 @@ export async function PATCH(
     if (versionInsert.error) {
       return NextResponse.json(
         { error: 'Petition updated but failed to persist version history.' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 

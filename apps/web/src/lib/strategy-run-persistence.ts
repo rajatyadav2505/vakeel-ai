@@ -7,7 +7,7 @@ import {
   type StrategyOutput,
 } from '@nyaya/shared';
 import { z } from 'zod';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 const strategyTurnFieldSchema = z.object({
   role: kautilyaRoleSchema,
@@ -42,7 +42,7 @@ export async function persistKautilyaStrategyRun(params: {
   if (!params.output.kautilyaCeres) return null;
 
   const run = params.output.kautilyaCeres;
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const runId = crypto.randomUUID();
   const selectedCards = new Set<string>([
     run.petitionerStrategies[run.requestedMode][0]?.id ?? '',

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { invokeJsonModel, validateFreeTierPolicy } from '@nyaya/agents/llm';
 import { requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { sanitizePlainText } from '@/lib/utils';
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     await enforceRateLimit(`settings-llm-test:${user.userId}`, 40);
 
     const payload = schema.parse(await request.json());
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
     let apiKey = payload.apiKey?.trim() || '';
     if (!apiKey) {
@@ -47,7 +47,10 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       apiKey = settings.data?.llm_api_key?.trim() || '';
-      if (payload.freeTierOnly === undefined && typeof settings.data?.free_tier_only === 'boolean') {
+      if (
+        payload.freeTierOnly === undefined &&
+        typeof settings.data?.free_tier_only === 'boolean'
+      ) {
         payload.freeTierOnly = settings.data.free_tier_only;
       }
     }
@@ -61,7 +64,7 @@ export async function POST(request: NextRequest) {
     if (!policy.allowed) {
       return NextResponse.json(
         { ok: false, error: policy.reason ?? 'Blocked by free-tier policy.' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -73,6 +76,7 @@ export async function POST(request: NextRequest) {
       temperature: 0,
       maxTokens: 80,
       schema: llmConnectivitySchema,
+      missingCredentialsBehavior: 'throw',
       llmConfig: {
         provider: payload.provider,
         model: sanitizePlainText(payload.model),
@@ -91,7 +95,7 @@ export async function POST(request: NextRequest) {
             'No valid JSON response from provider. Check key/base URL/model or provider free-tier limits.',
           latencyMs,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 

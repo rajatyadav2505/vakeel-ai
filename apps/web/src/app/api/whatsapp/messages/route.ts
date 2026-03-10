@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { sanitizePlainText } from '@/lib/utils';
 
@@ -46,13 +46,13 @@ export async function GET(request: NextRequest) {
     const phone = normalizePhone(params.get('phone'));
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
     let messagesQuery = supabase
       .from('whatsapp_messages')
       .select(
         'id, sender_phone, contact_phone, body, message_id, media_url, created_at, direction, delivery_status, raw_payload',
-        { count: 'exact' }
+        { count: 'exact' },
       )
       .eq('owner_user_id', user.userId)
       .order('created_at', { ascending: false })

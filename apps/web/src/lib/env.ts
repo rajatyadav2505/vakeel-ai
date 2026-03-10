@@ -5,6 +5,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   CLERK_SECRET_KEY: z.string().optional(),
+  CLERK_SUPABASE_JWT_TEMPLATE: z.string().optional(),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
   INDIANKANOON_API_TOKEN: z.string().optional(),
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
@@ -46,7 +47,8 @@ const envSchema = z.object({
 
 type Env = z.infer<typeof envSchema>;
 
-const allowPlaceholderDefaults = process.env.NODE_ENV !== 'production';
+const allowPlaceholderDefaults =
+  process.env.NODE_ENV === 'test' || process.env.ALLOW_PLACEHOLDER_ENV === 'true';
 
 const raw = {
   NEXT_PUBLIC_SUPABASE_URL:
@@ -59,6 +61,7 @@ const raw = {
     process.env.SUPABASE_SERVICE_ROLE_KEY
     ?? (allowPlaceholderDefaults ? 'replace-with-real-service-key-0000000000' : undefined),
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+  CLERK_SUPABASE_JWT_TEMPLATE: process.env.CLERK_SUPABASE_JWT_TEMPLATE,
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   INDIANKANOON_API_TOKEN: process.env.INDIANKANOON_API_TOKEN,
   UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,

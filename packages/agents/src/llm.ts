@@ -167,7 +167,7 @@ function isGoogleFreeModel(model: string) {
 
 function isGroqFreeModel(model: string) {
   return ['deepseek-r1-distill-llama-70b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'].includes(
-    model
+    model,
   );
 }
 
@@ -205,7 +205,10 @@ export function validateFreeTierPolicy(params: {
 
   if (params.provider === 'openrouter') {
     if (model === 'openrouter/free' || model.endsWith(':free')) return { allowed: true };
-    return { allowed: false, reason: 'OpenRouter free-tier requires model suffix ":free" or "openrouter/free".' };
+    return {
+      allowed: false,
+      reason: 'OpenRouter free-tier requires model suffix ":free" or "openrouter/free".',
+    };
   }
 
   if (params.provider === 'groq') {
@@ -215,12 +218,18 @@ export function validateFreeTierPolicy(params: {
 
   if (params.provider === 'cerebras') {
     if (isCerebrasFreeModel(model)) return { allowed: true };
-    return { allowed: false, reason: `Model "${model}" is not in the Cerebras free-tier allowlist.` };
+    return {
+      allowed: false,
+      reason: `Model "${model}" is not in the Cerebras free-tier allowlist.`,
+    };
   }
 
   if (params.provider === 'github') {
     if (isGithubFreeModel(model)) return { allowed: true };
-    return { allowed: false, reason: `Model "${model}" is not in the GitHub Models free-tier allowlist.` };
+    return {
+      allowed: false,
+      reason: `Model "${model}" is not in the GitHub Models free-tier allowlist.`,
+    };
   }
 
   if (params.provider === 'ollama') {
@@ -242,7 +251,10 @@ export function validateFreeTierPolicy(params: {
     };
   }
 
-  return { allowed: false, reason: 'Provider/model combination is not approved for free-tier-only mode.' };
+  return {
+    allowed: false,
+    reason: 'Provider/model combination is not approved for free-tier-only mode.',
+  };
 }
 
 async function invokeOpenAiCompatible<T>(params: {
@@ -424,20 +436,29 @@ export async function invokeJsonModel<T>(params: {
   maxTokens?: number;
   llmConfig?: RuntimeLlmConfig;
   schema: z.ZodType<T>;
+  missingCredentialsBehavior?: 'throw' | 'return-null';
 }): Promise<T | null> {
-  const provider = params.llmConfig?.provider ?? 'groq';
+  const provider = params.llmConfig?.provider ?? 'sarvam';
   const model = params.llmConfig?.model?.trim() || defaultModelForProvider(provider);
   const freeTierOnly = params.llmConfig?.freeTierOnly ?? true;
+  const missingCredentialsBehavior = params.missingCredentialsBehavior ?? 'return-null';
 
   const policy = validateFreeTierPolicy({ provider, model, freeTierOnly });
   if (!policy.allowed) {
-    console.warn(`[llm] blocked by free-tier policy: provider=${provider}, model=${model}. ${policy.reason ?? ''}`);
+    console.warn(
+      `[llm] blocked by free-tier policy: provider=${provider}, model=${model}. ${policy.reason ?? ''}`,
+    );
     return null;
   }
 
   const apiKey = resolveApiKey(provider, params.llmConfig?.apiKey);
   if (providerRequiresApiKey(provider) && !apiKey) {
-    throw new Error(`Missing API key for provider "${provider}". Update the provider settings and retry.`);
+    const message = `Missing API key for provider "${provider}". Update the provider settings and retry.`;
+    if (missingCredentialsBehavior === 'throw') {
+      throw new Error(message);
+    }
+    console.warn(`[llm] ${message} Falling back to deterministic non-LLM path.`);
+    return null;
   }
 
   const temperature = params.temperature ?? 0.35;
@@ -450,7 +471,7 @@ export async function invokeJsonModel<T>(params: {
   try {
     if (provider === 'anthropic') {
       const endpoint = resolveAnthropicMessagesUrl(
-        params.llmConfig?.baseUrl?.trim() || defaultNonOpenAiUrl(provider)
+        params.llmConfig?.baseUrl?.trim() || defaultNonOpenAiUrl(provider),
       );
       return await invokeAnthropic<T>({
         apiKey,
@@ -466,7 +487,7 @@ export async function invokeJsonModel<T>(params: {
     }
 
     const endpoint = resolveCompletionsUrl(
-      params.llmConfig?.baseUrl?.trim() || defaultCompletionsUrl(provider)
+      params.llmConfig?.baseUrl?.trim() || defaultCompletionsUrl(provider),
     );
 
     const compatResult = await invokeOpenAiCompatible<T>({

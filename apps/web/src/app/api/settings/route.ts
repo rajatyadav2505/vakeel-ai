@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import {
   DEFAULT_LLM_BASE_URL,
   DEFAULT_LLM_MODEL,
@@ -93,15 +93,15 @@ function toResponse(record: {
     llmModel: resolvedLlm.model ?? record.llm_model ?? DEFAULT_SETTINGS.llmModel,
     llmBaseUrl: resolvedLlm.baseUrl ?? record.llm_base_url ?? DEFAULT_SETTINGS.llmBaseUrl,
     notificationsEnabled: record.notifications_enabled ?? DEFAULT_SETTINGS.notificationsEnabled,
-    realtimeUpdatesEnabled: record.realtime_updates_enabled ?? DEFAULT_SETTINGS.realtimeUpdatesEnabled,
+    realtimeUpdatesEnabled:
+      record.realtime_updates_enabled ?? DEFAULT_SETTINGS.realtimeUpdatesEnabled,
     freeTierOnly: resolvedLlm.freeTierOnly ?? DEFAULT_SETTINGS.freeTierOnly,
     defaultPageSize: record.default_page_size ?? DEFAULT_SETTINGS.defaultPageSize,
     timezone: record.timezone ?? DEFAULT_SETTINGS.timezone,
     preferredLanguage: preferredLanguage.success
       ? preferredLanguage.data
       : DEFAULT_SETTINGS.preferredLanguage,
-    kautilyaCeresEnabled:
-      record.kautilya_ceres_enabled ?? DEFAULT_SETTINGS.kautilyaCeresEnabled,
+    kautilyaCeresEnabled: record.kautilya_ceres_enabled ?? DEFAULT_SETTINGS.kautilyaCeresEnabled,
     kautilyaCeresDefaultMode: kautilyaMode.success
       ? kautilyaMode.data
       : DEFAULT_SETTINGS.kautilyaCeresDefaultMode,
@@ -113,12 +113,12 @@ function toResponse(record: {
   };
 }
 
-async function getSettingsForUser(userId: string) {
-  const supabase = createSupabaseServerClient();
+async function getSettingsForUser(userId: string, accessToken: string) {
+  const supabase = createSupabaseUserClient(accessToken);
   const { data, error } = await supabase
     .from('user_settings')
     .select(
-      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
+      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode',
     )
     .eq('owner_user_id', userId)
     .maybeSingle();
@@ -146,10 +146,10 @@ async function getSettingsForUser(userId: string) {
         kautilya_ceres_default_mode: DEFAULT_SETTINGS.kautilyaCeresDefaultMode,
         kautilya_ceres_compute_mode: DEFAULT_SETTINGS.kautilyaCeresComputeMode,
       },
-      { onConflict: 'owner_user_id' }
+      { onConflict: 'owner_user_id' },
     )
     .select(
-      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
+      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode',
     )
     .single();
 
@@ -165,11 +165,13 @@ export async function GET() {
   try {
     const user = await requireAppUser();
     await enforceRateLimit(`settings-get:${user.userId}`, 180);
-    const record = await getSettingsForUser(user.userId);
+    const record = await getSettingsForUser(user.userId, user.supabaseAccessToken);
 
     return NextResponse.json({
       ok: true,
-      settings: record ? toResponse(record) : { ...DEFAULT_SETTINGS, hasLlmApiKey: false, llmApiKeyMasked: '' },
+      settings: record
+        ? toResponse(record)
+        : { ...DEFAULT_SETTINGS, hasLlmApiKey: false, llmApiKeyMasked: '' },
     });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 400 });
@@ -189,7 +191,8 @@ export async function PUT(request: NextRequest) {
 
     if (payload.llmProvider) update.llm_provider = payload.llmProvider;
     if (payload.llmModel !== undefined) update.llm_model = sanitizePlainText(payload.llmModel);
-    if (payload.llmBaseUrl !== undefined) update.llm_base_url = sanitizePlainText(payload.llmBaseUrl);
+    if (payload.llmBaseUrl !== undefined)
+      update.llm_base_url = sanitizePlainText(payload.llmBaseUrl);
     if (payload.notificationsEnabled !== undefined) {
       update.notifications_enabled = payload.notificationsEnabled;
     }
@@ -201,7 +204,8 @@ export async function PUT(request: NextRequest) {
     }
     if (payload.defaultPageSize !== undefined) update.default_page_size = payload.defaultPageSize;
     if (payload.timezone !== undefined) update.timezone = sanitizePlainText(payload.timezone);
-    if (payload.preferredLanguage !== undefined) update.preferred_language = payload.preferredLanguage;
+    if (payload.preferredLanguage !== undefined)
+      update.preferred_language = payload.preferredLanguage;
     if (payload.kautilyaCeresEnabled !== undefined) {
       update.kautilya_ceres_enabled = payload.kautilyaCeresEnabled;
     }
@@ -216,13 +220,13 @@ export async function PUT(request: NextRequest) {
       update.llm_api_key = payload.llmApiKey.trim();
     }
 
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
     const { data, error } = await supabase
       .from('user_settings')
       .upsert(update, { onConflict: 'owner_user_id' })
-    .select(
-      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
-    )
+      .select(
+        'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode',
+      )
       .single();
 
     if (error || !data) {

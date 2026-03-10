@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { requireAppUser } from '@/lib/auth';
 
 export interface PaginationOptions {
@@ -42,7 +42,7 @@ function normalizePagination(options?: PaginationOptions) {
 
 export async function getUserListPreferences(): Promise<UserListPreferences> {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const result = await supabase
     .from('user_settings')
     .select('default_page_size,realtime_updates_enabled')
@@ -64,12 +64,10 @@ export async function getUserListPreferences(): Promise<UserListPreferences> {
 
 export async function getUserStrategyPreferences(): Promise<UserStrategyPreferences> {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const result = await supabase
     .from('user_settings')
-    .select(
-      'kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
-    )
+    .select('kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode')
     .eq('owner_user_id', user.userId)
     .maybeSingle();
 
@@ -84,9 +82,7 @@ export async function getUserStrategyPreferences(): Promise<UserStrategyPreferen
   return {
     kautilyaCeresEnabled: result.data.kautilya_ceres_enabled ?? true,
     kautilyaCeresDefaultMode:
-      result.data.kautilya_ceres_default_mode === 'exploit_mode'
-        ? 'exploit_mode'
-        : 'robust_mode',
+      result.data.kautilya_ceres_default_mode === 'exploit_mode' ? 'exploit_mode' : 'robust_mode',
     kautilyaCeresComputeMode:
       result.data.kautilya_ceres_compute_mode === 'fast'
         ? 'fast'
@@ -98,7 +94,7 @@ export async function getUserStrategyPreferences(): Promise<UserStrategyPreferen
 
 export async function getDashboardSnapshot() {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
   const [casesRes, simRes, petitionsRes] = await Promise.all([
     supabase
@@ -123,7 +119,8 @@ export async function getDashboardSnapshot() {
 
   if (casesRes.error) console.error('[queries] cases fetch error:', casesRes.error.message);
   if (simRes.error) console.error('[queries] simulations fetch error:', simRes.error.message);
-  if (petitionsRes.error) console.error('[queries] petitions fetch error:', petitionsRes.error.message);
+  if (petitionsRes.error)
+    console.error('[queries] petitions fetch error:', petitionsRes.error.message);
 
   return {
     cases: casesRes.data ?? [],
@@ -136,13 +133,13 @@ export async function getDashboardSnapshot() {
 
 export async function getCaseById(caseId: string) {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
   const [caseRes, simulationRes, docsRes] = await Promise.all([
     supabase
       .from('cases')
       .select(
-        'id, title, case_type, stage, court_name, summary, client_name, opponent_name, jurisdiction, cnr_number, evidence_graph_json, case_sensitivity, evidence_extracted_at'
+        'id, title, case_type, stage, court_name, summary, client_name, opponent_name, jurisdiction, cnr_number, evidence_graph_json, case_sensitivity, evidence_extracted_at',
       )
       .eq('id', caseId)
       .eq('owner_user_id', user.userId)
@@ -157,7 +154,7 @@ export async function getCaseById(caseId: string) {
     supabase
       .from('case_documents')
       .select(
-        'id, file_name, file_path, document_type, parser_status, size_bytes, is_privileged, created_at'
+        'id, file_name, file_path, document_type, parser_status, size_bytes, is_privileged, created_at',
       )
       .eq('case_id', caseId)
       .eq('owner_user_id', user.userId)
@@ -181,7 +178,7 @@ export async function getCaseById(caseId: string) {
 
 export async function getSimulationById(simulationId: string) {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const res = await supabase
     .from('simulations')
     .select('id, headline, mode, confidence, win_probability, strategy_json, case_id, created_at')
@@ -207,7 +204,7 @@ export async function getSimulationsPage(options?: PaginationOptions): Promise<
   }>
 > {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const { page, pageSize, from, to } = normalizePagination(options);
 
   const res = await supabase
@@ -231,12 +228,12 @@ export async function getSimulationsPage(options?: PaginationOptions): Promise<
 
 export async function getSimulationJobsOverview(limit = 8) {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const boundedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
   const res = await supabase
     .from('simulation_jobs')
     .select(
-      'id,mode,status,objective,attempts,last_error,result_simulation_id,queued_at,started_at,finished_at,updated_at'
+      'id,mode,status,objective,attempts,last_error,result_simulation_id,queued_at,started_at,finished_at,updated_at',
     )
     .eq('owner_user_id', user.userId)
     .order('queued_at', { ascending: false })
@@ -264,7 +261,7 @@ export async function getPetitionsPage(options?: PaginationOptions): Promise<
   }>
 > {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const { page, pageSize, from, to } = normalizePagination(options);
   let res: any = await supabase
     .from('petitions')
@@ -272,7 +269,7 @@ export async function getPetitionsPage(options?: PaginationOptions): Promise<
       'id, petition_type, court_template, confidence, case_id, created_at, review_status, current_version, last_reviewed_at',
       {
         count: 'exact',
-      }
+      },
     )
     .eq('owner_user_id', user.userId)
     .order('created_at', { ascending: false })
@@ -283,7 +280,7 @@ export async function getPetitionsPage(options?: PaginationOptions): Promise<
     res = await supabase
       .from('petitions')
       .select('id, petition_type, court_template, confidence, case_id, created_at', {
-      count: 'exact',
+        count: 'exact',
       })
       .eq('owner_user_id', user.userId)
       .order('created_at', { ascending: false })
@@ -329,12 +326,12 @@ export async function getPetitionsPage(options?: PaginationOptions): Promise<
 
 export async function getPetitionReviewBundle(petitionId: string) {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
   let petitionRes: any = await supabase
     .from('petitions')
     .select(
-      'id, case_id, petition_type, court_template, body, confidence, lawyer_verified, created_at, review_status, current_version, review_notes, last_reviewed_at'
+      'id, case_id, petition_type, court_template, body, confidence, lawyer_verified, created_at, review_status, current_version, review_notes, last_reviewed_at',
     )
     .eq('id', petitionId)
     .eq('owner_user_id', user.userId)
@@ -343,7 +340,9 @@ export async function getPetitionReviewBundle(petitionId: string) {
   if (petitionRes.error) {
     petitionRes = (await supabase
       .from('petitions')
-      .select('id, case_id, petition_type, court_template, body, confidence, lawyer_verified, created_at')
+      .select(
+        'id, case_id, petition_type, court_template, body, confidence, lawyer_verified, created_at',
+      )
       .eq('id', petitionId)
       .eq('owner_user_id', user.userId)
       .single()) as typeof petitionRes;
@@ -363,17 +362,24 @@ export async function getPetitionReviewBundle(petitionId: string) {
 
   if (versionsRes.error) {
     // Backward compatibility before version table migration.
-    versionsRes = { data: [], error: null, count: null, status: 200, statusText: 'OK' } as typeof versionsRes;
+    versionsRes = {
+      data: [],
+      error: null,
+      count: null,
+      status: 200,
+      statusText: 'OK',
+    } as typeof versionsRes;
   }
 
   return {
     petition: petitionRes.data
       ? {
           ...(petitionRes.data as Record<string, unknown>),
-          review_status: (petitionRes.data as { review_status?: string | null }).review_status ?? 'draft',
+          review_status:
+            (petitionRes.data as { review_status?: string | null }).review_status ?? 'draft',
           current_version: Math.max(
             1,
-            ((petitionRes.data as { current_version?: number | null }).current_version ?? 1)
+            (petitionRes.data as { current_version?: number | null }).current_version ?? 1,
           ),
           review_notes: (petitionRes.data as { review_notes?: string | null }).review_notes ?? null,
           last_reviewed_at:
@@ -395,7 +401,7 @@ export async function getCasesPage(options?: PaginationOptions): Promise<
   }>
 > {
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const { page, pageSize, from, to } = normalizePagination(options);
   const res = await supabase
     .from('cases')

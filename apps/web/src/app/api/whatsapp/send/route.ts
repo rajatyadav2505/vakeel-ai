@@ -6,7 +6,7 @@ import { resolveRuntimeLlmConfig } from '@/lib/llm-settings';
 import { sanitizePlainText } from '@/lib/utils';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 
 const schema = z
   .object({
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (shouldGroundReply && payload.templateId) {
       return NextResponse.json(
         { error: 'templateId cannot be combined with groundedLegalReply in the same request.' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -76,11 +76,11 @@ export async function POST(request: NextRequest) {
       if (!payload.caseId) {
         return NextResponse.json(
           { error: 'caseId is required when groundedLegalReply is enabled.' },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
-      const supabase = createSupabaseServerClient();
+      const supabase = createSupabaseUserClient(user.supabaseAccessToken);
       const [caseRes, docsRes, settingsRes] = await Promise.all([
         supabase
           .from('cases')
@@ -97,13 +97,18 @@ export async function POST(request: NextRequest) {
           .limit(10),
         supabase
           .from('user_settings')
-          .select('llm_provider,llm_model,llm_api_key,llm_base_url,free_tier_only,preferred_language')
+          .select(
+            'llm_provider,llm_model,llm_api_key,llm_base_url,free_tier_only,preferred_language',
+          )
           .eq('owner_user_id', user.userId)
           .maybeSingle(),
       ]);
 
       if (!caseRes.data) {
-        return NextResponse.json({ error: 'Case not found for grounded WhatsApp reply.' }, { status: 404 });
+        return NextResponse.json(
+          { error: 'Case not found for grounded WhatsApp reply.' },
+          { status: 404 },
+        );
       }
       const llmConfig = settingsRes.data ? resolveRuntimeLlmConfig(settingsRes.data) : undefined;
 
@@ -116,7 +121,9 @@ export async function POST(request: NextRequest) {
         voiceTranscript: caseRes.data.voice_transcript ?? null,
         parsedDocumentTexts: (docsRes.data ?? [])
           .map((item) => item.parsed_text)
-          .filter((value): value is string => typeof value === 'string' && value.trim().length >= 20),
+          .filter(
+            (value): value is string => typeof value === 'string' && value.trim().length >= 20,
+          ),
         ...(llmConfig ? { outputLanguage: llmConfig.outputLanguage } : {}),
         ...(llmConfig ? { llmConfig } : {}),
       });
@@ -136,7 +143,9 @@ export async function POST(request: NextRequest) {
         '',
         'Precedent support:',
         topPrecedents.length
-          ? topPrecedents.map((item) => `- ${item.caseName} (${item.court}, ${item.date})`).join('\n')
+          ? topPrecedents
+              .map((item) => `- ${item.caseName} (${item.court}, ${item.date})`)
+              .join('\n')
           : '- No verified Indian precedent found yet.',
         '',
         `Latest precedents checked at: ${packet?.precedentsCheckedAt ?? 'unknown'}`,
@@ -173,7 +182,7 @@ export async function POST(request: NextRequest) {
     }
 
     const messageId = deriveMessageId(sendResponse);
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
     const enhancedInsert = await supabase.from('whatsapp_messages').insert({
       id: crypto.randomUUID(),
       owner_user_id: user.userId,
@@ -215,7 +224,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, response: sendResponse, messageId, mode: messageMode, template: templateMeta });
+    return NextResponse.json({
+      ok: true,
+      response: sendResponse,
+      messageId,
+      mode: messageMode,
+      template: templateMeta,
+    });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 400 });
   }

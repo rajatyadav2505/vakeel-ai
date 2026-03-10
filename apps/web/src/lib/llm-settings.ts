@@ -28,14 +28,16 @@ export interface ResolvedRuntimeLlmConfig {
   outputLanguage: 'en-IN' | 'hi-IN';
 }
 
-export const DEFAULT_LLM_PROVIDER: LlmProvider = 'groq';
-export const DEFAULT_LLM_MODEL = 'openai/gpt-oss-120b';
-export const DEFAULT_LLM_BASE_URL = 'https://api.groq.com/openai/v1';
+export const DEFAULT_LLM_PROVIDER: LlmProvider = 'sarvam';
+export const DEFAULT_LLM_MODEL = 'sarvam-m';
+export const DEFAULT_LLM_BASE_URL = 'https://api.sarvam.ai/v1';
 
 const LEGACY_SARVAM_MODEL = 'sarvam-m';
 const LEGACY_SARVAM_BASE_URL = 'https://api.sarvam.ai/v1';
 const LEGACY_OPENAI_MODEL = 'gpt-4.1-mini';
 const LEGACY_OPENAI_BASE_URL = 'https://api.openai.com/v1';
+const LEGACY_GROQ_MODEL = 'openai/gpt-oss-120b';
+const LEGACY_GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
 function normalizeOptional(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -52,17 +54,25 @@ function isLegacyDefaultSelection(settings?: StoredLlmSettings | null) {
   if (!provider && !model && !baseUrl) return true;
 
   if (
-    provider === 'sarvam'
-    && (model === null || model === LEGACY_SARVAM_MODEL)
-    && (baseUrl === null || baseUrl === LEGACY_SARVAM_BASE_URL)
+    provider === 'sarvam' &&
+    (model === null || model === LEGACY_SARVAM_MODEL) &&
+    (baseUrl === null || baseUrl === LEGACY_SARVAM_BASE_URL)
   ) {
     return true;
   }
 
   if (
-    provider === 'openai'
-    && (model === null || model === LEGACY_OPENAI_MODEL)
-    && (baseUrl === null || baseUrl === LEGACY_OPENAI_BASE_URL)
+    provider === 'groq' &&
+    (model === null || model === LEGACY_GROQ_MODEL) &&
+    (baseUrl === null || baseUrl === LEGACY_GROQ_BASE_URL)
+  ) {
+    return true;
+  }
+
+  if (
+    provider === 'openai' &&
+    (model === null || model === LEGACY_OPENAI_MODEL) &&
+    (baseUrl === null || baseUrl === LEGACY_OPENAI_BASE_URL)
   ) {
     return true;
   }
@@ -71,21 +81,21 @@ function isLegacyDefaultSelection(settings?: StoredLlmSettings | null) {
 }
 
 export function resolveRuntimeLlmConfig(
-  settings?: StoredLlmSettings | null
+  settings?: StoredLlmSettings | null,
 ): ResolvedRuntimeLlmConfig {
-  const useGroqDefault = isLegacyDefaultSelection(settings);
+  const useDefaultSelection = isLegacyDefaultSelection(settings);
   const provider = (
-    useGroqDefault
+    useDefaultSelection
       ? DEFAULT_LLM_PROVIDER
-      : normalizeOptional(settings?.llm_provider) ?? DEFAULT_LLM_PROVIDER
+      : (normalizeOptional(settings?.llm_provider) ?? DEFAULT_LLM_PROVIDER)
   ) as LlmProvider;
-  const model = useGroqDefault
+  const model = useDefaultSelection
     ? DEFAULT_LLM_MODEL
-    : normalizeOptional(settings?.llm_model) ?? DEFAULT_LLM_MODEL;
-  const baseUrl = useGroqDefault
+    : (normalizeOptional(settings?.llm_model) ?? DEFAULT_LLM_MODEL);
+  const baseUrl = useDefaultSelection
     ? DEFAULT_LLM_BASE_URL
-    : normalizeOptional(settings?.llm_base_url) ?? DEFAULT_LLM_BASE_URL;
-  const apiKey = useGroqDefault ? null : normalizeOptional(settings?.llm_api_key);
+    : (normalizeOptional(settings?.llm_base_url) ?? DEFAULT_LLM_BASE_URL);
+  const apiKey = useDefaultSelection ? null : normalizeOptional(settings?.llm_api_key);
   const outputLanguage: 'en-IN' | 'hi-IN' =
     settings?.preferred_language === 'hi-IN' ? 'hi-IN' : 'en-IN';
 

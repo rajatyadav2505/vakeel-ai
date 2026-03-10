@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 
 const schema = z.object({
@@ -11,17 +11,14 @@ const paramsSchema = z.object({
   id: z.string().uuid(),
 });
 
-export async function PATCH(
-  request: NextRequest,
-  props: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireAppUser();
     await enforceRateLimit(`case-stage:${user.userId}`, 180);
 
     const params = paramsSchema.parse(await props.params);
     const payload = schema.parse(await request.json());
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
     const { data, error } = await supabase
       .from('cases')

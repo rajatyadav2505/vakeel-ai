@@ -15,6 +15,8 @@ supabase/
   seed/                # Seed data
 ```
 
+`apps/web` is the only active application surface. The root-level `src/` directory is legacy SQLite prototype material retained only for the archived Drizzle schema.
+
 ## Implemented Scope
 
 - Auth + RBAC scaffolding with Clerk metadata (`ADVOCATE`, `JUNIOR`, `CLIENT`, `ADMIN`)
@@ -69,6 +71,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
+CLERK_SUPABASE_JWT_TEMPLATE=supabase
 
 INDIANKANOON_API_TOKEN=
 
@@ -95,6 +98,8 @@ SUPREME_COURT_SEARCH_URL=
 VERDICTUM_SEARCH_URL=
 SCC_ONLINE_SEARCH_URL=
 DATA_ENCRYPTION_KEY=
+SIMULATION_WORKER_TOKEN=
+APP_BASE_URL=
 
 RESEND_API_KEY=
 SENTRY_DSN=
@@ -121,6 +126,10 @@ The app now supports these providers via **Settings > Service configuration** (`
 Defaults are auto-filled in settings for each provider. You can override model and base URL per user.
 
 `freeTierOnly` is enabled by default and blocks potentially billable provider/model combinations. Out of the box, the project defaults to `sarvam-m` on Sarvam (`INR 0/token`) to keep runtime inference at zero cost.
+
+### Clerk + Supabase JWT
+
+Authenticated app reads now use the Supabase anon key plus a Clerk JWT template instead of the Supabase service role. Configure a Clerk JWT template named `supabase` (or set `CLERK_SUPABASE_JWT_TEMPLATE`) so the token includes the Clerk user id as `sub` for Supabase RLS.
 
 ### No-Cost Policy
 
@@ -170,11 +179,13 @@ Detailed architecture and local usage notes are in [`docs/kautilya-ceres.md`](/U
 ## Local Setup
 
 1. Install dependencies
+
 ```bash
 npm install
 ```
 
 2. Run Supabase locally and apply migration
+
 ```bash
 supabase start
 supabase db reset --linked
@@ -183,11 +194,24 @@ supabase db reset --linked
 The KAUTILYA_CERES migration is in [`supabase/migrations/20260307_kautilya_ceres.sql`](/Users/rajatyadav/LegalPOC/supabase/migrations/20260307_kautilya_ceres.sql).
 
 3. Run web app
+
 ```bash
 npm run dev --workspace=@nyaya/web
 ```
 
-4. Run tests
+4. Run the simulation worker trigger when queue-backed jobs are enabled
+
+```bash
+curl -X POST http://localhost:3000/api/simulations/worker \
+  -H "x-worker-token: $SIMULATION_WORKER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"limit":3}'
+```
+
+The Supabase Edge Function `simulation-runner` can forward the same request for scheduled execution.
+
+5. Run tests
+
 ```bash
 npm run test --workspace=@nyaya/web
 npm run agents:test
@@ -213,7 +237,8 @@ npm run build --workspace=@nyaya/web
 - `POST /api/whatsapp/send` - send template/text updates to client
 - `POST /api/whatsapp/webhook` - ingest inbound messages/docs
 - `GET /api/kanoon/search?q=...` - legal citation lookup example
-- `POST /api/ecourts/sync` - e-Courts sync queue stub
+- `POST /api/ecourts/sync` - e-Courts sync via configured adapter
+- `POST /api/simulations/worker` - claim and process queued simulation jobs
 
 ## Security/Compliance
 

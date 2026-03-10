@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { whatsappWebhookSchema } from '@nyaya/shared';
 import { env } from '@/lib/env';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/server';
 
 const SIGNATURE_HEADER_NAMES = [
   'x-whatsapp-signature-256',
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       mediaUrl: json.mediaUrl,
     });
 
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseAdminClient();
     const from = normalizePhone(payload.from);
 
     let latestOwnerLookup = await supabase

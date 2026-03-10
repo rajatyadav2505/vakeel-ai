@@ -4,12 +4,12 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { simulationRequestSchema } from '@nyaya/shared';
 import { canRunSimulation, requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { sanitizePlainText } from '@/lib/utils';
 
-async function assertCaseOwnership(caseId: string, ownerUserId: string) {
-  const supabase = createSupabaseServerClient();
+async function assertCaseOwnership(caseId: string, ownerUserId: string, accessToken: string) {
+  const supabase = createSupabaseUserClient(accessToken);
   const res = await supabase
     .from('cases')
     .select('id')
@@ -21,6 +21,7 @@ async function assertCaseOwnership(caseId: string, ownerUserId: string) {
 }
 
 async function enqueueSimulationJob(params: {
+  accessToken: string;
   ownerUserId: string;
   caseId: string;
   mode: 'single_agent' | 'multi_agent';
@@ -30,7 +31,7 @@ async function enqueueSimulationJob(params: {
   strategyMode?: 'robust_mode' | 'exploit_mode';
   computeMode?: 'fast' | 'standard' | 'full';
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(params.accessToken);
   const result = await supabase
     .from('simulation_jobs')
     .insert({
@@ -60,22 +61,18 @@ async function enqueueSimulationJob(params: {
   return result.data.id as string;
 }
 
-async function getStrategySettings(userId: string) {
-  const supabase = createSupabaseServerClient();
+async function getStrategySettings(userId: string, accessToken: string) {
+  const supabase = createSupabaseUserClient(accessToken);
   const result = await supabase
     .from('user_settings')
-    .select(
-      'kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
-    )
+    .select('kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode')
     .eq('owner_user_id', userId)
     .maybeSingle();
 
   return {
     kautilyaCeresEnabled: result.data?.kautilya_ceres_enabled ?? true,
     kautilyaCeresDefaultMode:
-      result.data?.kautilya_ceres_default_mode === 'exploit_mode'
-        ? 'exploit_mode'
-        : 'robust_mode',
+      result.data?.kautilya_ceres_default_mode === 'exploit_mode' ? 'exploit_mode' : 'robust_mode',
     kautilyaCeresComputeMode:
       result.data?.kautilya_ceres_compute_mode === 'fast'
         ? 'fast'
@@ -87,14 +84,16 @@ async function getStrategySettings(userId: string) {
 
 export async function runSingleAgentAction(formData: FormData) {
   const user = await requireAppUser();
-  if (!canRunSimulation(user.role)) throw new Error('Only advocates/juniors/admins can run simulations.');
+  if (!canRunSimulation(user.role))
+    throw new Error('Only advocates/juniors/admins can run simulations.');
   await enforceRateLimit(`single-sim:${user.userId}`, 25);
 
   const caseId = String(formData.get('caseId') ?? '');
   const objective = sanitizePlainText(String(formData.get('objective') ?? ''));
-  await assertCaseOwnership(caseId, user.userId);
+  await assertCaseOwnership(caseId, user.userId, user.supabaseAccessToken);
 
   const jobId = await enqueueSimulationJob({
+    accessToken: user.supabaseAccessToken,
     ownerUserId: user.userId,
     caseId,
     mode: 'single_agent',
@@ -108,9 +107,10 @@ export async function runSingleAgentAction(formData: FormData) {
 
 export async function runMultiAgentAction(formData: FormData) {
   const user = await requireAppUser();
-  if (!canRunSimulation(user.role)) throw new Error('Only advocates/juniors/admins can run simulations.');
+  if (!canRunSimulation(user.role))
+    throw new Error('Only advocates/juniors/admins can run simulations.');
   await enforceRateLimit(`multi-sim:${user.userId}`, 15);
-  const strategySettings = await getStrategySettings(user.userId);
+  const strategySettings = await getStrategySettings(user.userId, user.supabaseAccessToken);
 
   const payload = simulationRequestSchema.parse({
     caseId: String(formData.get('caseId') ?? ''),
@@ -119,24 +119,21 @@ export async function runMultiAgentAction(formData: FormData) {
     includeMonteCarlo: true,
     includeChanakyaOverlay: true,
     engineName: String(
-      formData.get('engineName')
-      ?? (strategySettings.kautilyaCeresEnabled ? 'KAUTILYA_CERES' : 'legacy')
+      formData.get('engineName') ??
+        (strategySettings.kautilyaCeresEnabled ? 'KAUTILYA_CERES' : 'legacy'),
     ),
-    strategyMode: String(
-      formData.get('strategyMode') ?? strategySettings.kautilyaCeresDefaultMode
-    ),
-    computeMode: String(
-      formData.get('computeMode') ?? strategySettings.kautilyaCeresComputeMode
-    ),
+    strategyMode: String(formData.get('strategyMode') ?? strategySettings.kautilyaCeresDefaultMode),
+    computeMode: String(formData.get('computeMode') ?? strategySettings.kautilyaCeresComputeMode),
   });
 
   if (payload.engineName === 'KAUTILYA_CERES' && !strategySettings.kautilyaCeresEnabled) {
     throw new Error('KAUTILYA_CERES is disabled in Settings.');
   }
 
-  await assertCaseOwnership(payload.caseId, user.userId);
+  await assertCaseOwnership(payload.caseId, user.userId, user.supabaseAccessToken);
 
   const jobId = await enqueueSimulationJob({
+    accessToken: user.supabaseAccessToken,
     ownerUserId: user.userId,
     caseId: payload.caseId,
     mode: 'multi_agent',

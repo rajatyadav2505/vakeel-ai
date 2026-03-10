@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => {
   const revalidatePath = vi.fn();
   const requireAppUser = vi.fn();
   const canCreateCase = vi.fn();
-  const createSupabaseServerClient = vi.fn();
+  const createSupabaseAdminClient = vi.fn();
+  const createSupabaseUserClient = vi.fn();
   const enforceRateLimit = vi.fn();
   const transcribeVoiceNote = vi.fn();
   const encryptText = vi.fn();
@@ -26,7 +27,8 @@ const mocks = vi.hoisted(() => {
     revalidatePath,
     requireAppUser,
     canCreateCase,
-    createSupabaseServerClient,
+    createSupabaseAdminClient,
+    createSupabaseUserClient,
     enforceRateLimit,
     transcribeVoiceNote,
     encryptText,
@@ -55,7 +57,8 @@ vi.mock('@/lib/auth', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  createSupabaseServerClient: mocks.createSupabaseServerClient,
+  createSupabaseAdminClient: mocks.createSupabaseAdminClient,
+  createSupabaseUserClient: mocks.createSupabaseUserClient,
 }));
 
 vi.mock('@/lib/rate-limit', () => ({
@@ -139,7 +142,11 @@ function createSupabaseMock() {
 describe('createCaseAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireAppUser.mockResolvedValue({ userId: 'user_123', role: 'ADVOCATE' });
+    mocks.requireAppUser.mockResolvedValue({
+      userId: 'user_123',
+      role: 'ADVOCATE',
+      supabaseAccessToken: 'supabase-jwt',
+    });
     mocks.canCreateCase.mockReturnValue(true);
     mocks.enforceRateLimit.mockResolvedValue(undefined);
     mocks.transcribeVoiceNote.mockResolvedValue(null);
@@ -165,7 +172,8 @@ describe('createCaseAction', () => {
 
   it('creates a case, updates evidence metadata, and redirects', async () => {
     const supabase = createSupabaseMock();
-    mocks.createSupabaseServerClient.mockReturnValue(supabase.client);
+    mocks.createSupabaseAdminClient.mockReturnValue(supabase.client);
+    mocks.createSupabaseUserClient.mockReturnValue(supabase.client);
 
     const formData = new FormData();
     formData.set('title', 'Acme Builders v Rao');
@@ -192,7 +200,8 @@ describe('createCaseAction', () => {
   it('stores uploaded PDF metadata and OCR attempts when a PDF is attached', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_710_000_000_000);
     const supabase = createSupabaseMock();
-    mocks.createSupabaseServerClient.mockReturnValue(supabase.client);
+    mocks.createSupabaseAdminClient.mockReturnValue(supabase.client);
+    mocks.createSupabaseUserClient.mockReturnValue(supabase.client);
     mocks.extractStructuredTextFromUpload.mockResolvedValue({
       text: null,
       needsOcr: true,

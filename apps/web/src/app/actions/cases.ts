@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { caseCreateSchema, type DocumentType } from '@nyaya/shared';
 import { buildCaseEvidenceGraph } from '@nyaya/agents';
 import { canCreateCase, requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient, createSupabaseUserClient } from '@/lib/supabase/server';
 import { sanitizePlainText } from '@/lib/utils';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { transcribeVoiceNote } from '@/lib/ai/whisper';
@@ -33,7 +33,7 @@ async function uploadOptionalFile(params: {
   normalizedFileName?: string;
 }) {
   if (!params.file || params.file.size === 0) return null;
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const path = `${params.caseId}/${params.suffix}-${Date.now()}-${params.normalizedFileName ?? params.file.name}`;
 
   const upload = await supabase.storage.from(params.bucket).upload(path, params.file, {
@@ -46,7 +46,7 @@ async function uploadOptionalFile(params: {
 
 async function getCostPolicy(params: {
   userId: string;
-  supabase: ReturnType<typeof createSupabaseServerClient>;
+  supabase: ReturnType<typeof createSupabaseUserClient>;
 }) {
   const fallback = {
     freeTierOnly: true,
@@ -64,8 +64,11 @@ async function getCostPolicy(params: {
 
   const freeTierOnly = settings.data.free_tier_only ?? true;
   const preferredTranscriptionProvider =
-    settings.data.llm_provider === 'openai' && !freeTierOnly ? ('openai' as const) : ('sarvam' as const);
-  const preferredOcrProvider = settings.data.llm_provider === 'google' ? ('google' as const) : ('sarvam' as const);
+    settings.data.llm_provider === 'openai' && !freeTierOnly
+      ? ('openai' as const)
+      : ('sarvam' as const);
+  const preferredOcrProvider =
+    settings.data.llm_provider === 'google' ? ('google' as const) : ('sarvam' as const);
 
   return {
     freeTierOnly,
@@ -167,7 +170,7 @@ export async function createCaseAction(formData: FormData) {
   });
 
   const caseId = crypto.randomUUID();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const costPolicy = await getCostPolicy({ userId: user.userId, supabase });
 
   const casePdf = formData.get('casePdf');
@@ -184,7 +187,9 @@ export async function createCaseAction(formData: FormData) {
 
   const totalUploadBytes = (preparedPdf?.file.size ?? 0) + (preparedVoice?.file.size ?? 0);
   if (totalUploadBytes > UPLOAD_POLICY.maxCaseTotalBytes) {
-    throw new Error(`Total upload size exceeds ${UPLOAD_POLICY.maxCaseTotalBytes} bytes for one case.`);
+    throw new Error(
+      `Total upload size exceeds ${UPLOAD_POLICY.maxCaseTotalBytes} bytes for one case.`,
+    );
   }
 
   const pdfPath = await uploadOptionalFile({

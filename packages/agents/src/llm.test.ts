@@ -9,7 +9,7 @@ describe('validateFreeTierPolicy', () => {
         provider: 'sarvam',
         model: 'sarvam-m',
         freeTierOnly: true,
-      }).allowed
+      }).allowed,
     ).toBe(true);
 
     expect(
@@ -17,7 +17,7 @@ describe('validateFreeTierPolicy', () => {
         provider: 'sarvam',
         model: 'sarvam-x',
         freeTierOnly: true,
-      }).allowed
+      }).allowed,
     ).toBe(false);
   });
 
@@ -27,7 +27,7 @@ describe('validateFreeTierPolicy', () => {
         provider: 'openrouter',
         model: 'deepseek/deepseek-r1-0528:free',
         freeTierOnly: true,
-      }).allowed
+      }).allowed,
     ).toBe(true);
 
     expect(
@@ -35,7 +35,7 @@ describe('validateFreeTierPolicy', () => {
         provider: 'openrouter',
         model: 'openrouter/auto',
         freeTierOnly: true,
-      }).allowed
+      }).allowed,
     ).toBe(false);
   });
 
@@ -45,7 +45,7 @@ describe('validateFreeTierPolicy', () => {
         provider: 'openai',
         model: 'gpt-4.1-mini',
         freeTierOnly: true,
-      }).allowed
+      }).allowed,
     ).toBe(false);
 
     expect(
@@ -53,7 +53,7 @@ describe('validateFreeTierPolicy', () => {
         provider: 'openai',
         model: 'gpt-4.1-mini',
         freeTierOnly: false,
-      }).allowed
+      }).allowed,
     ).toBe(true);
   });
 
@@ -63,7 +63,7 @@ describe('validateFreeTierPolicy', () => {
         provider: 'deepseek',
         model: 'deepseek-reasoner',
         freeTierOnly: true,
-      }).allowed
+      }).allowed,
     ).toBe(false);
   });
 });
@@ -83,7 +83,7 @@ describe('invokeJsonModel', () => {
     process.env.OPENAI_API_KEY = originalEnv.OPENAI_API_KEY;
   });
 
-  it('throws when a paid provider is selected without a configured API key', async () => {
+  it('returns null by default when a provider requires credentials that are not configured', async () => {
     await expect(
       invokeJsonModel({
         systemPrompt: 'Return JSON.',
@@ -93,32 +93,48 @@ describe('invokeJsonModel', () => {
           freeTierOnly: false,
         },
         schema: z.object({ ok: z.boolean() }),
-      })
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('throws when credentialless execution is explicitly disallowed', async () => {
+    await expect(
+      invokeJsonModel({
+        systemPrompt: 'Return JSON.',
+        userPrompt: 'Return JSON.',
+        llmConfig: {
+          provider: 'openai',
+          freeTierOnly: false,
+        },
+        missingCredentialsBehavior: 'throw',
+        schema: z.object({ ok: z.boolean() }),
+      }),
     ).rejects.toThrow('Missing API key for provider "openai"');
   });
 
   it('returns null when the model output does not satisfy the requested schema', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            choices: [
-              {
-                message: {
-                  content: '{"ok":"yes"}',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: '{"ok":"yes"}',
+                  },
                 },
+              ],
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
               },
-            ],
-          }),
-          {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/json',
             },
-          }
-        )
-      )
+          ),
+      ),
     );
 
     const result = await invokeJsonModel({

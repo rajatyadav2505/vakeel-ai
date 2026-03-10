@@ -19,8 +19,8 @@ const COMPLIANCE_ITEMS = [
 ];
 
 const PROVIDERS = [
-  'groq',
   'sarvam',
+  'groq',
   'google',
   'openrouter',
   'cerebras',
@@ -357,7 +357,8 @@ export function SettingsConsole(props: {
               onChange={(event) =>
                 setSettings((current) => ({
                   ...current,
-                  kautilyaCeresDefaultMode: event.target.value as SettingsPayload['kautilyaCeresDefaultMode'],
+                  kautilyaCeresDefaultMode: event.target
+                    .value as SettingsPayload['kautilyaCeresDefaultMode'],
                 }))
               }
             >
@@ -373,7 +374,8 @@ export function SettingsConsole(props: {
               onChange={(event) =>
                 setSettings((current) => ({
                   ...current,
-                  kautilyaCeresComputeMode: event.target.value as SettingsPayload['kautilyaCeresComputeMode'],
+                  kautilyaCeresComputeMode: event.target
+                    .value as SettingsPayload['kautilyaCeresComputeMode'],
                 }))
               }
             >
@@ -430,7 +432,12 @@ export function SettingsConsole(props: {
             <Button type="submit" disabled={saving}>
               {saving ? 'Saving...' : 'Save settings'}
             </Button>
-            <Button type="button" variant="outline" disabled={testing} onClick={() => void onTestConnection()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={testing}
+              onClick={() => void onTestConnection()}
+            >
               {testing ? 'Testing...' : 'Test LLM connection'}
             </Button>
             <p className="text-xs text-muted-foreground">{status}</p>

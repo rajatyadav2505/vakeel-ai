@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { buildCaseEvidenceGraph } from '@nyaya/agents';
 import { requireAppUser } from '@/lib/auth';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 
 const paramsSchema = z.object({
@@ -14,7 +14,7 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ id: 
     const user = await requireAppUser();
     await enforceRateLimit(`case-evidence-get:${user.userId}`, 180);
     const params = paramsSchema.parse(await props.params);
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
     const [caseRes, docsRes] = await Promise.all([
       supabase
@@ -25,7 +25,9 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ id: 
         .single(),
       supabase
         .from('case_documents')
-        .select('id, file_name, document_type, parser_status, size_bytes, is_privileged, created_at')
+        .select(
+          'id, file_name, document_type, parser_status, size_bytes, is_privileged, created_at',
+        )
         .eq('case_id', params.id)
         .eq('owner_user_id', user.userId)
         .order('created_at', { ascending: false })
@@ -54,7 +56,7 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ id:
     const user = await requireAppUser();
     await enforceRateLimit(`case-evidence-rebuild:${user.userId}`, 40);
     const params = paramsSchema.parse(await props.params);
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
     const caseRes = await supabase
       .from('cases')
@@ -102,4 +104,3 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ id:
     return NextResponse.json({ error: String(error) }, { status: 400 });
   }
 }
-

@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { requireLawyerVerification } from '@nyaya/shared';
 import { requireAppUser } from '@/lib/auth';
 
-export async function GET(
-  _request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
   const user = await requireAppUser();
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
 
   const { data: petition } = await supabase
     .from('petitions')

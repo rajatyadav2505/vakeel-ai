@@ -6,13 +6,13 @@ import { petitionRequestSchema } from '@nyaya/shared';
 import { generateFormattedPetition } from '@nyaya/agents';
 import { requireAppUser } from '@/lib/auth';
 import { resolveRuntimeLlmConfig } from '@/lib/llm-settings';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseUserClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { logAiAudit } from '@/lib/audit';
 import { sanitizePlainText } from '@/lib/utils';
 
-async function getCaseContext(caseId: string, ownerUserId: string) {
-  const supabase = createSupabaseServerClient();
+async function getCaseContext(caseId: string, ownerUserId: string, accessToken: string) {
+  const supabase = createSupabaseUserClient(accessToken);
   const [caseRes, docsRes] = await Promise.all([
     supabase
       .from('cases')
@@ -37,8 +37,8 @@ async function getCaseContext(caseId: string, ownerUserId: string) {
   };
 }
 
-async function getUserLlmConfig(userId: string) {
-  const supabase = createSupabaseServerClient();
+async function getUserLlmConfig(userId: string, accessToken: string) {
+  const supabase = createSupabaseUserClient(accessToken);
   const settings = await supabase
     .from('user_settings')
     .select('llm_provider,llm_model,llm_api_key,llm_base_url,free_tier_only,preferred_language')
@@ -66,8 +66,8 @@ export async function generatePetitionAction(formData: FormData) {
     lawyerVerified: String(formData.get('lawyerVerified') ?? '') === 'on',
   });
 
-  const caseContext = await getCaseContext(payload.caseId, user.userId);
-  const llmConfig = await getUserLlmConfig(user.userId);
+  const caseContext = await getCaseContext(payload.caseId, user.userId, user.supabaseAccessToken);
+  const llmConfig = await getUserLlmConfig(user.userId, user.supabaseAccessToken);
   const result = await generateFormattedPetition({
     ...payload,
     forum: caseContext.court_name ?? null,
@@ -78,7 +78,7 @@ export async function generatePetitionAction(formData: FormData) {
     ...(llmConfig ? { llmConfig } : {}),
   });
 
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseUserClient(user.supabaseAccessToken);
   const petitionId = crypto.randomUUID();
   const petitionInsert = {
     id: petitionId,
@@ -135,10 +135,14 @@ export async function generatePetitionAction(formData: FormData) {
     created_by: user.userId,
   });
   if (versionInsert.error) {
-    console.warn('[petitions] failed to persist initial petition version:', versionInsert.error.message);
+    console.warn(
+      '[petitions] failed to persist initial petition version:',
+      versionInsert.error.message,
+    );
   }
 
   await logAiAudit({
+    accessToken: user.supabaseAccessToken,
     caseId: payload.caseId,
     userId: user.userId,
     runType: 'petition',
