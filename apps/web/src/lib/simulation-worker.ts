@@ -1,5 +1,7 @@
-import { runOrchestratedWarGame, runSingleAgentSimulation } from '@nyaya/agents';
+import { runKautilyaCeresWarGame, runOrchestratedWarGame, runSingleAgentSimulation } from '@nyaya/agents';
+import type { DocumentType } from '@nyaya/shared';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { persistKautilyaStrategyRun } from '@/lib/strategy-run-persistence';
 
 interface SimulationJobRow {
   id: string;
@@ -12,17 +14,45 @@ interface SimulationJobRow {
   payload?: {
     objective?: string;
     depth?: number;
+    engineName?: 'legacy' | 'KAUTILYA_CERES';
+    strategyMode?: 'robust_mode' | 'exploit_mode';
+    computeMode?: 'fast' | 'standard' | 'full';
   } | null;
   attempts: number;
 }
 
 interface CaseContext {
   id: string;
+  title: string;
   summary: string;
   court_name: string | null;
   jurisdiction: string | null;
   voice_transcript: string | null;
   parsedDocumentTexts: string[];
+  documents: Array<{
+    id: string;
+    name: string;
+    documentType: string;
+    text: string | null;
+  }>;
+}
+
+const DOCUMENT_TYPES: DocumentType[] = [
+  'unknown',
+  'petition',
+  'affidavit',
+  'notice',
+  'order',
+  'agreement',
+  'postal_proof',
+  'receipt',
+  'annexure',
+  'evidence',
+  'audio_note',
+];
+
+function toDocumentType(value: string): DocumentType {
+  return DOCUMENT_TYPES.includes(value as DocumentType) ? (value as DocumentType) : 'unknown';
 }
 
 async function getCaseContext(caseId: string, ownerUserId: string): Promise<CaseContext> {
@@ -30,13 +60,13 @@ async function getCaseContext(caseId: string, ownerUserId: string): Promise<Case
   const [res, docs] = await Promise.all([
     supabase
       .from('cases')
-      .select('id,summary,court_name,jurisdiction,voice_transcript')
+      .select('id,title,summary,court_name,jurisdiction,voice_transcript')
       .eq('id', caseId)
       .eq('owner_user_id', ownerUserId)
       .single(),
     supabase
       .from('case_documents')
-      .select('parsed_text')
+      .select('id,file_name,document_type,parsed_text')
       .eq('case_id', caseId)
       .eq('owner_user_id', ownerUserId)
       .order('created_at', { ascending: false })
@@ -52,6 +82,12 @@ async function getCaseContext(caseId: string, ownerUserId: string): Promise<Case
     parsedDocumentTexts: (docs.data ?? [])
       .map((item) => item.parsed_text)
       .filter((text): text is string => typeof text === 'string' && text.trim().length >= 20),
+    documents: (docs.data ?? []).map((item) => ({
+      id: item.id,
+      name: item.file_name,
+      documentType: item.document_type,
+      text: item.parsed_text,
+    })),
   };
 }
 
@@ -167,18 +203,41 @@ async function processSingleJob(job: SimulationJobRow) {
     return simulationId;
   }
 
-  const output = await runOrchestratedWarGame({
-    caseId: caseContext.id,
-    summary: caseContext.summary,
-    objective,
-    forum: caseContext.court_name ?? null,
-    jurisdiction: caseContext.jurisdiction ?? null,
-    parsedDocumentTexts: caseContext.parsedDocumentTexts,
-    voiceTranscript: caseContext.voice_transcript ?? null,
-    depth: job.payload?.depth ?? job.depth ?? 7,
-    ...(llmConfig ? { outputLanguage: llmConfig.outputLanguage } : {}),
-    ...(llmConfig ? { llmConfig } : {}),
-  });
+  const engineName = job.payload?.engineName ?? 'legacy';
+  const output =
+    engineName === 'KAUTILYA_CERES'
+      ? await runKautilyaCeresWarGame({
+          caseId: caseContext.id,
+          summary: caseContext.summary,
+          objective,
+          forum: caseContext.court_name ?? null,
+          jurisdiction: caseContext.jurisdiction ?? null,
+          parsedDocumentTexts: caseContext.parsedDocumentTexts,
+          documents: caseContext.documents.map((document) => ({
+            id: document.id,
+            name: document.name,
+            documentType: toDocumentType(document.documentType),
+            text: document.text,
+          })),
+          voiceTranscript: caseContext.voice_transcript ?? null,
+          depth: job.payload?.depth ?? job.depth ?? 7,
+          strategyMode: job.payload?.strategyMode ?? 'robust_mode',
+          computeMode: job.payload?.computeMode ?? 'standard',
+          ...(llmConfig ? { outputLanguage: llmConfig.outputLanguage } : {}),
+          ...(llmConfig ? { llmConfig } : {}),
+        })
+      : await runOrchestratedWarGame({
+          caseId: caseContext.id,
+          summary: caseContext.summary,
+          objective,
+          forum: caseContext.court_name ?? null,
+          jurisdiction: caseContext.jurisdiction ?? null,
+          parsedDocumentTexts: caseContext.parsedDocumentTexts,
+          voiceTranscript: caseContext.voice_transcript ?? null,
+          depth: job.payload?.depth ?? job.depth ?? 7,
+          ...(llmConfig ? { outputLanguage: llmConfig.outputLanguage } : {}),
+          ...(llmConfig ? { llmConfig } : {}),
+        });
 
   const supabase = createSupabaseServerClient();
   const simulationId = crypto.randomUUID();
@@ -193,11 +252,21 @@ async function processSingleJob(job: SimulationJobRow) {
     strategy_json: output,
   });
 
+  if (engineName === 'KAUTILYA_CERES') {
+    await persistKautilyaStrategyRun({
+      simulationId,
+      ownerUserId: job.owner_user_id,
+      caseId: caseContext.id,
+      objective,
+      output,
+    });
+  }
+
   await insertAuditLog({
     caseId: caseContext.id,
     userId: job.owner_user_id,
     runType: 'multi_agent',
-    prompt: `Multi-agent objective: ${objective}`,
+    prompt: `${engineName} objective: ${objective}`,
     response: JSON.stringify(output.rankedPlan),
     confidence: output.confidence,
   });

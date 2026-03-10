@@ -5,46 +5,22 @@ import { WinProbabilityGauge } from '@/components/strategy/win-probability-gauge
 import { PayoffMatrixChart } from '@/components/strategy/payoff-matrix-chart';
 import { WarRoomCanvas } from '@/components/war-room-canvas';
 import { AgentThread } from '@/components/agent-thread';
+import { KautilyaStrategyView } from '@/components/kautilya/kautilya-strategy-view';
+import { KAUTILYA_CERES_FIXTURE_CASE, runKautilyaCeresWarGame } from '@nyaya/agents';
 
-const sample = {
-  title: 'Agarwal v. State Utility Board',
-  stage: 'analysis',
-  caseType: 'constitutional',
-  objective: 'Secure interim stay and force document disclosure in 3 hearings.',
-  matrix: [
-    [6, 2],
-    [8, 4],
-  ],
-  winProbability: 0.74,
-  proposals: [
-    {
-      id: '1',
-      agentId: 'p3',
-      move: 'Precedent cluster filing',
-      rationale: 'File compact precedent map to neutralize maintainability objections on day 1.',
-    },
-    {
-      id: '2',
-      agentId: 'p15',
-      move: 'Interim pressure motion',
-      rationale: 'Seek urgent interim order with timeline control and cost-backed adjournment conditions.',
-    },
-    {
-      id: '3',
-      agentId: 'p16',
-      move: 'Contradiction strike',
-      rationale: 'Exploit departmental affidavit inconsistency across annexures and hearing submissions.',
-    },
-    {
-      id: '4',
-      agentId: 'p17',
-      move: 'Payoff-optimized sequence',
-      rationale: 'Sequence hearings to maximize expected utility under opponent-defect probability of 0.62.',
-    },
-  ],
-};
+export default async function DemoPage() {
+  const sample = await runKautilyaCeresWarGame({
+    caseId: KAUTILYA_CERES_FIXTURE_CASE.caseId,
+    summary: KAUTILYA_CERES_FIXTURE_CASE.summary,
+    objective: KAUTILYA_CERES_FIXTURE_CASE.objective,
+    forum: KAUTILYA_CERES_FIXTURE_CASE.forum,
+    jurisdiction: KAUTILYA_CERES_FIXTURE_CASE.jurisdiction,
+    voiceTranscript: KAUTILYA_CERES_FIXTURE_CASE.voiceTranscript,
+    documents: KAUTILYA_CERES_FIXTURE_CASE.documents,
+    strategyMode: 'robust_mode',
+    computeMode: 'standard',
+  });
 
-export default function DemoPage() {
   return (
     <div className="space-y-4">
       <Card className="space-y-2">
@@ -56,21 +32,28 @@ export default function DemoPage() {
           This is a static preview of the war-room dashboard style with sample legal data.
         </p>
         <p className="text-sm">
-          <span className="font-semibold">{sample.title}</span> • {sample.caseType} • {sample.stage}
+          <span className="font-semibold">{KAUTILYA_CERES_FIXTURE_CASE.title}</span> • fixture • analysis
         </p>
-        <p className="text-sm text-muted-foreground">{sample.objective}</p>
+        <p className="text-sm text-muted-foreground">{KAUTILYA_CERES_FIXTURE_CASE.objective}</p>
         <Link href="/" className="text-sm text-primary hover:underline">
           Open main app
         </Link>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-        <PayoffMatrixChart matrix={sample.matrix} />
+        <PayoffMatrixChart matrix={sample.payOffMatrix} />
         <WinProbabilityGauge value={sample.winProbability} />
       </div>
 
       <WarRoomCanvas proposals={sample.proposals} />
       <AgentThread proposals={sample.proposals} />
+      {sample.kautilyaCeres && (
+        <KautilyaStrategyView
+          caseId={KAUTILYA_CERES_FIXTURE_CASE.caseId}
+          simulationId="demo-simulation"
+          engine={sample.kautilyaCeres}
+        />
+      )}
     </div>
   );
 }

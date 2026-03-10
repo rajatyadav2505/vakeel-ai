@@ -29,6 +29,9 @@ export const simulationRequestSchema = z.object({
   depth: z.number().int().min(5).max(12).default(7),
   includeMonteCarlo: z.boolean().default(true),
   includeChanakyaOverlay: z.boolean().default(true),
+  engineName: z.enum(['legacy', 'KAUTILYA_CERES']).default('legacy'),
+  strategyMode: z.enum(['robust_mode', 'exploit_mode']).default('robust_mode'),
+  computeMode: z.enum(['fast', 'standard', 'full']).default('standard'),
 });
 
 export const petitionRequestSchema = z.object({

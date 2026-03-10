@@ -15,6 +15,7 @@ import { WinProbabilityGauge } from '@/components/strategy/win-probability-gauge
 import { WarRoomCanvas } from '@/components/war-room-canvas';
 import { AgentThread } from '@/components/agent-thread';
 import { LegalAuthorityPanels } from '@/components/authority/legal-authority-panels';
+import { KautilyaStrategyView } from '@/components/kautilya/kautilya-strategy-view';
 
 const CHANAKYA_COLORS: Record<string, string> = {
   saam: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
@@ -102,6 +103,14 @@ export default async function SimulationDetailsPage(props: { params: Promise<{ i
 
       <WarRoomCanvas proposals={strategy?.proposals ?? []} />
       <AgentThread proposals={strategy?.proposals ?? []} />
+
+      {strategy?.kautilyaCeres && (
+        <KautilyaStrategyView
+          simulationId={simulation.id}
+          caseId={simulation.case_id}
+          engine={strategy.kautilyaCeres}
+        />
+      )}
 
       <Card>
         <h2 className="mb-3 font-[Georgia] text-base font-semibold">Support classification</h2>

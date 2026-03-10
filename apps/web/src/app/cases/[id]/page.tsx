@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { getCaseById } from '@/lib/queries';
+import { Select } from '@/components/ui/select';
+import { getCaseById, getUserStrategyPreferences } from '@/lib/queries';
 import { Badge } from '@/components/ui/badge';
 import { formatPercent } from '@/lib/utils';
 import { requireAppUser } from '@/lib/auth';
@@ -38,6 +39,7 @@ export default async function CaseDetailsPage(props: { params: Promise<{ id: str
   const user = await requireAppUser();
   const params = await props.params;
   const data = await getCaseById(params.id);
+  const strategyPreferences = await getUserStrategyPreferences();
   if (!data.caseData) return notFound();
   const evidenceGraph = (data.caseData.evidence_graph_json ?? null) as CaseEvidenceGraph | null;
   const recommendations = citizenModeRecommendations(data.caseData.case_type);
@@ -146,9 +148,21 @@ export default async function CaseDetailsPage(props: { params: Promise<{ id: str
           </Card>
 
           <Card className="space-y-3">
-            <h2 className="font-[Georgia] text-base font-semibold">Phase 2: Evidence-based strategy analysis</h2>
+            <h2 className="font-[Georgia] text-base font-semibold">Phase 2: Strategy engine</h2>
             <form action={runMultiAgentAction} className="space-y-3">
               <input type="hidden" name="caseId" value={data.caseData.id} />
+              <Label>
+                Engine
+                <Select
+                  name="engineName"
+                  defaultValue={strategyPreferences.kautilyaCeresEnabled ? 'KAUTILYA_CERES' : 'legacy'}
+                >
+                  {strategyPreferences.kautilyaCeresEnabled && (
+                    <option value="KAUTILYA_CERES">KAUTILYA_CERES</option>
+                  )}
+                  <option value="legacy">Legacy war-room</option>
+                </Select>
+              </Label>
               <Label>
                 Objective
                 <Textarea
@@ -158,10 +172,40 @@ export default async function CaseDetailsPage(props: { params: Promise<{ id: str
                   defaultValue="Stay 5-7 moves ahead, anticipate opponent branches, and optimize courtroom sequence."
                 />
               </Label>
+              {strategyPreferences.kautilyaCeresEnabled && (
+                <>
+                  <Label>
+                    Strategy mode
+                    <Select
+                      name="strategyMode"
+                      defaultValue={strategyPreferences.kautilyaCeresDefaultMode}
+                    >
+                      <option value="robust_mode">Robust mode</option>
+                      <option value="exploit_mode">Exploit mode</option>
+                    </Select>
+                  </Label>
+                  <Label>
+                    Compute mode
+                    <Select
+                      name="computeMode"
+                      defaultValue={strategyPreferences.kautilyaCeresComputeMode}
+                    >
+                      <option value="fast">Fast</option>
+                      <option value="standard">Standard</option>
+                      <option value="full">Full</option>
+                    </Select>
+                  </Label>
+                </>
+              )}
               <Label>
                 Depth (5-12)
                 <Input name="depth" type="number" min={5} max={12} defaultValue={7} />
               </Label>
+              <p className="text-xs text-muted-foreground">
+                {strategyPreferences.kautilyaCeresEnabled
+                  ? 'KAUTILYA_CERES runs typed moves, verifier pruning, judge-panel scoring, fracture search, and regret-matched tactics.'
+                  : 'Legacy war-room remains active until KAUTILYA_CERES is enabled in Settings.'}
+              </p>
               <Button type="submit">Queue Strategy Analysis</Button>
             </form>
           </Card>

@@ -56,6 +56,9 @@ interface SettingsPayload {
   defaultPageSize: number;
   timezone: string;
   preferredLanguage: 'en-IN' | 'hi-IN';
+  kautilyaCeresEnabled: boolean;
+  kautilyaCeresDefaultMode: 'robust_mode' | 'exploit_mode';
+  kautilyaCeresComputeMode: 'fast' | 'standard' | 'full';
   hasLlmApiKey: boolean;
   llmApiKeyMasked: string;
 }
@@ -70,6 +73,9 @@ const DEFAULT_SETTINGS: SettingsPayload = {
   defaultPageSize: 12,
   timezone: 'Asia/Kolkata',
   preferredLanguage: 'en-IN',
+  kautilyaCeresEnabled: true,
+  kautilyaCeresDefaultMode: 'robust_mode',
+  kautilyaCeresComputeMode: 'standard',
   hasLlmApiKey: false,
   llmApiKeyMasked: '',
 };
@@ -123,6 +129,9 @@ export function SettingsConsole(props: {
         defaultPageSize: settings.defaultPageSize,
         timezone: settings.timezone,
         preferredLanguage: settings.preferredLanguage,
+        kautilyaCeresEnabled: settings.kautilyaCeresEnabled,
+        kautilyaCeresDefaultMode: settings.kautilyaCeresDefaultMode,
+        kautilyaCeresComputeMode: settings.kautilyaCeresComputeMode,
         llmApiKey: llmApiKeyInput.trim() || undefined,
         clearLlmApiKey: clearApiKey,
       }),
@@ -340,6 +349,39 @@ export function SettingsConsole(props: {
             </Select>
           </Label>
 
+          <Label>
+            KAUTILYA_CERES mode
+            <Select
+              value={settings.kautilyaCeresDefaultMode}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  kautilyaCeresDefaultMode: event.target.value as SettingsPayload['kautilyaCeresDefaultMode'],
+                }))
+              }
+            >
+              <option value="robust_mode">Robust mode</option>
+              <option value="exploit_mode">Exploit mode</option>
+            </Select>
+          </Label>
+
+          <Label>
+            KAUTILYA_CERES compute
+            <Select
+              value={settings.kautilyaCeresComputeMode}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  kautilyaCeresComputeMode: event.target.value as SettingsPayload['kautilyaCeresComputeMode'],
+                }))
+              }
+            >
+              <option value="fast">Fast</option>
+              <option value="standard">Standard</option>
+              <option value="full">Full</option>
+            </Select>
+          </Label>
+
           <div className="rounded-lg border border-border bg-background p-3 text-sm">
             <div className="flex items-center gap-2">
               <Checkbox
@@ -367,6 +409,15 @@ export function SettingsConsole(props: {
                 }
               />
               <span>Enforce free-tier only (block potentially billable models)</span>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <Checkbox
+                checked={settings.kautilyaCeresEnabled}
+                onCheckedChange={(checked) =>
+                  setSettings((current) => ({ ...current, kautilyaCeresEnabled: checked }))
+                }
+              />
+              <span>Enable KAUTILYA_CERES strategy engine</span>
             </div>
             <div className="mt-2 flex items-center gap-2">
               <Checkbox checked={clearApiKey} onCheckedChange={setClearApiKey} />

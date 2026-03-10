@@ -30,6 +30,12 @@ supabase/
   - authority ranking by relevance, hierarchy, forum/jurisdiction fit, recency
   - conflict detection and unresolved-issue marking
   - mandatory verified/unverified claim separation
+- KAUTILYA_CERES litigation engine:
+  - evidence graph + authority graph compilation for structured strategy search
+  - verifier-pruned petitioner/respondent move generation
+  - judge-panel scoring with appellate-survival pressure
+  - contradiction fracture search (`BHEDA`) and regret-matched tactic/evidence policy snapshots
+  - event-log persistence for strategy runs and distillation traces
 - Phase 1 simulation: single-agent baseline
 - Phase 2 simulation: multi-agent war-room (8–15 selected from 20 personas)
 - Chanakya + game-theory scoring + Monte-Carlo branch scoring
@@ -141,6 +147,26 @@ Defaults are auto-filled in settings for each provider. You can override model a
   - explicit unverified legal-claim markers when authority is missing
 - Strategy and simulation detail UI now shows inspectable authority panels with source links and metadata.
 
+## KAUTILYA_CERES
+
+`KAUTILYA_CERES` stands for **Kautilyan Counterfactual Evidence Regret with Equilibrium Search**.
+
+It is integrated into the existing case page, simulation worker, simulation detail UI, demo page, and petition drafting flow. The engine treats the model as a move generator inside a graph, verifier, judge-panel, and search loop rather than as the final decision-maker.
+
+Primary implementation points:
+
+- `packages/agents/src/kautilya-ceres.ts`
+- `packages/agents/src/kautilya-ceres-graph.ts`
+- `packages/agents/src/kautilya-ceres-verifiers.ts`
+- `packages/agents/src/kautilya-ceres-fracture.ts`
+- `packages/agents/src/kautilya-ceres-judge.ts`
+- `packages/agents/src/kautilya-ceres-regret.ts`
+- `apps/web/src/lib/simulation-worker.ts`
+- `apps/web/src/components/kautilya/kautilya-strategy-view.tsx`
+- `supabase/migrations/20260307_kautilya_ceres.sql`
+
+Detailed architecture and local usage notes are in [`docs/kautilya-ceres.md`](/Users/rajatyadav/LegalPOC/docs/kautilya-ceres.md).
+
 ## Local Setup
 
 1. Install dependencies
@@ -154,6 +180,8 @@ supabase start
 supabase db reset --linked
 ```
 
+The KAUTILYA_CERES migration is in [`supabase/migrations/20260307_kautilya_ceres.sql`](/Users/rajatyadav/LegalPOC/supabase/migrations/20260307_kautilya_ceres.sql).
+
 3. Run web app
 ```bash
 npm run dev --workspace=@nyaya/web
@@ -163,6 +191,7 @@ npm run dev --workspace=@nyaya/web
 ```bash
 npm run test --workspace=@nyaya/web
 npm run agents:test
+npm run build --workspace=@nyaya/web
 ```
 
 ## Deployment

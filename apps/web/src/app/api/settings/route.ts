@@ -19,6 +19,8 @@ const providerSchema = z.enum([
 ]);
 type LlmProvider = z.infer<typeof providerSchema>;
 const languageSchema = z.enum(['en-IN', 'hi-IN']);
+const strategyModeSchema = z.enum(['robust_mode', 'exploit_mode']);
+const computeModeSchema = z.enum(['fast', 'standard', 'full']);
 
 const updateSchema = z.object({
   llmProvider: providerSchema.optional(),
@@ -32,6 +34,9 @@ const updateSchema = z.object({
   defaultPageSize: z.number().int().min(5).max(50).optional(),
   timezone: z.string().min(2).max(100).optional(),
   preferredLanguage: languageSchema.optional(),
+  kautilyaCeresEnabled: z.boolean().optional(),
+  kautilyaCeresDefaultMode: strategyModeSchema.optional(),
+  kautilyaCeresComputeMode: computeModeSchema.optional(),
 });
 
 const DEFAULT_SETTINGS = {
@@ -44,6 +49,9 @@ const DEFAULT_SETTINGS = {
   defaultPageSize: 12,
   timezone: 'Asia/Kolkata',
   preferredLanguage: 'en-IN' as z.infer<typeof languageSchema>,
+  kautilyaCeresEnabled: true,
+  kautilyaCeresDefaultMode: 'robust_mode' as z.infer<typeof strategyModeSchema>,
+  kautilyaCeresComputeMode: 'standard' as z.infer<typeof computeModeSchema>,
 };
 
 function maskApiKey(value: string | null | undefined) {
@@ -63,10 +71,15 @@ function toResponse(record: {
   default_page_size?: number | null;
   timezone?: string | null;
   preferred_language?: string | null;
+  kautilya_ceres_enabled?: boolean | null;
+  kautilya_ceres_default_mode?: string | null;
+  kautilya_ceres_compute_mode?: string | null;
 }) {
   const llmApiKey = record.llm_api_key ?? '';
   const provider = providerSchema.safeParse(record.llm_provider);
   const preferredLanguage = languageSchema.safeParse(record.preferred_language);
+  const kautilyaMode = strategyModeSchema.safeParse(record.kautilya_ceres_default_mode);
+  const kautilyaCompute = computeModeSchema.safeParse(record.kautilya_ceres_compute_mode);
   return {
     llmProvider: provider.success ? provider.data : DEFAULT_SETTINGS.llmProvider,
     llmModel: record.llm_model ?? DEFAULT_SETTINGS.llmModel,
@@ -79,6 +92,14 @@ function toResponse(record: {
     preferredLanguage: preferredLanguage.success
       ? preferredLanguage.data
       : DEFAULT_SETTINGS.preferredLanguage,
+    kautilyaCeresEnabled:
+      record.kautilya_ceres_enabled ?? DEFAULT_SETTINGS.kautilyaCeresEnabled,
+    kautilyaCeresDefaultMode: kautilyaMode.success
+      ? kautilyaMode.data
+      : DEFAULT_SETTINGS.kautilyaCeresDefaultMode,
+    kautilyaCeresComputeMode: kautilyaCompute.success
+      ? kautilyaCompute.data
+      : DEFAULT_SETTINGS.kautilyaCeresComputeMode,
     hasLlmApiKey: Boolean(llmApiKey),
     llmApiKeyMasked: maskApiKey(llmApiKey),
   };
@@ -89,7 +110,7 @@ async function getSettingsForUser(userId: string) {
   const { data, error } = await supabase
     .from('user_settings')
     .select(
-      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language'
+      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
     )
     .eq('owner_user_id', userId)
     .maybeSingle();
@@ -105,7 +126,7 @@ async function getSettingsForUser(userId: string) {
     .from('user_settings')
     .upsert({ owner_user_id: userId }, { onConflict: 'owner_user_id' })
     .select(
-      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language'
+      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
     )
     .single();
 
@@ -158,6 +179,15 @@ export async function PUT(request: NextRequest) {
     if (payload.defaultPageSize !== undefined) update.default_page_size = payload.defaultPageSize;
     if (payload.timezone !== undefined) update.timezone = sanitizePlainText(payload.timezone);
     if (payload.preferredLanguage !== undefined) update.preferred_language = payload.preferredLanguage;
+    if (payload.kautilyaCeresEnabled !== undefined) {
+      update.kautilya_ceres_enabled = payload.kautilyaCeresEnabled;
+    }
+    if (payload.kautilyaCeresDefaultMode !== undefined) {
+      update.kautilya_ceres_default_mode = payload.kautilyaCeresDefaultMode;
+    }
+    if (payload.kautilyaCeresComputeMode !== undefined) {
+      update.kautilya_ceres_compute_mode = payload.kautilyaCeresComputeMode;
+    }
     if (payload.clearLlmApiKey) update.llm_api_key = null;
     if (payload.llmApiKey !== undefined && payload.llmApiKey.trim().length > 0) {
       update.llm_api_key = payload.llmApiKey.trim();
@@ -167,9 +197,9 @@ export async function PUT(request: NextRequest) {
     const { data, error } = await supabase
       .from('user_settings')
       .upsert(update, { onConflict: 'owner_user_id' })
-      .select(
-        'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language'
-      )
+    .select(
+      'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
+    )
       .single();
 
     if (error || !data) {

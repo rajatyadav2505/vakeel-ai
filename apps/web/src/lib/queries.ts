@@ -19,6 +19,12 @@ export interface UserListPreferences {
   realtimeUpdatesEnabled: boolean;
 }
 
+export interface UserStrategyPreferences {
+  kautilyaCeresEnabled: boolean;
+  kautilyaCeresDefaultMode: 'robust_mode' | 'exploit_mode';
+  kautilyaCeresComputeMode: 'fast' | 'standard' | 'full';
+}
+
 function normalizePagination(options?: PaginationOptions) {
   const rawPage = Number(options?.page ?? 1);
   const rawPageSize = Number(options?.pageSize ?? 10);
@@ -53,6 +59,40 @@ export async function getUserListPreferences(): Promise<UserListPreferences> {
   return {
     defaultPageSize: Math.min(50, Math.max(5, result.data.default_page_size ?? 12)),
     realtimeUpdatesEnabled: result.data.realtime_updates_enabled ?? true,
+  };
+}
+
+export async function getUserStrategyPreferences(): Promise<UserStrategyPreferences> {
+  const user = await requireAppUser();
+  const supabase = createSupabaseServerClient();
+  const result = await supabase
+    .from('user_settings')
+    .select(
+      'kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
+    )
+    .eq('owner_user_id', user.userId)
+    .maybeSingle();
+
+  if (result.error || !result.data) {
+    return {
+      kautilyaCeresEnabled: true,
+      kautilyaCeresDefaultMode: 'robust_mode',
+      kautilyaCeresComputeMode: 'standard',
+    };
+  }
+
+  return {
+    kautilyaCeresEnabled: result.data.kautilya_ceres_enabled ?? true,
+    kautilyaCeresDefaultMode:
+      result.data.kautilya_ceres_default_mode === 'exploit_mode'
+        ? 'exploit_mode'
+        : 'robust_mode',
+    kautilyaCeresComputeMode:
+      result.data.kautilya_ceres_compute_mode === 'fast'
+        ? 'fast'
+        : result.data.kautilya_ceres_compute_mode === 'full'
+          ? 'full'
+          : 'standard',
   };
 }
 
