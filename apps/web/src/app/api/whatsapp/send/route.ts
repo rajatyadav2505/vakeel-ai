@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
 
     if (enhancedInsert.error) {
       // Backward compatibility when migration columns are not present yet.
-      await supabase.from('whatsapp_messages').insert({
+      const legacyInsert = await supabase.from('whatsapp_messages').insert({
         id: crypto.randomUUID(),
         sender_phone: to,
         body: text,
@@ -221,6 +221,10 @@ export async function POST(request: NextRequest) {
           providerResponse: sendResponse,
         },
       });
+
+      if (legacyInsert.error) {
+        throw new Error(`Failed to persist WhatsApp message: ${legacyInsert.error.message}`);
+      }
     }
 
     return NextResponse.json({ ok: true, response: sendResponse, messageId, mode: messageMode, template: templateMeta });

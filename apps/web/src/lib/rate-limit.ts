@@ -13,10 +13,8 @@ export async function enforceRateLimit(key: string, maxPerMinute = 60) {
   if (!redis) return;
 
   const bucketKey = `rl:${key}:${new Date().toISOString().slice(0, 16)}`;
+  await redis.set(bucketKey, 0, { ex: 65, nx: true });
   const count = await redis.incr(bucketKey);
-  if (count === 1) {
-    await redis.expire(bucketKey, 65);
-  }
   if (count > maxPerMinute) {
     throw new Error('Rate limit exceeded. Please retry shortly.');
   }

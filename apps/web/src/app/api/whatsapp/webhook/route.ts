@@ -1,6 +1,18 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { whatsappWebhookSchema } from '@nyaya/shared';
+import { env } from '@/lib/env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+
+const SIGNATURE_HEADER_NAMES = [
+  'x-whatsapp-signature-256',
+  'x-whatsapp-signature',
+  'x-hub-signature-256',
+  'x-hub-signature',
+] as const;
+
+class WebhookConfigurationError extends Error {}
+class WebhookAuthorizationError extends Error {}
 
 function normalizePhone(value: string) {
   return value.replace(/^whatsapp:/i, '').replace(/[^\d+]/g, '');
@@ -28,9 +40,58 @@ function extractMessageBody(payload: Record<string, unknown>) {
   return '';
 }
 
+function timingSafeEqualText(left: string, right: string) {
+  const leftBytes = Buffer.from(left);
+  const rightBytes = Buffer.from(right);
+  if (leftBytes.length !== rightBytes.length) return false;
+  return timingSafeEqual(leftBytes, rightBytes);
+}
+
+function verifyWebhookSignature(request: NextRequest, rawBody: string) {
+  const secret = env.WHATSAPP_WEBHOOK_SECRET?.trim();
+  if (!secret) {
+    throw new WebhookConfigurationError('WHATSAPP_WEBHOOK_SECRET is not configured.');
+  }
+
+  const providedSignatures = SIGNATURE_HEADER_NAMES.flatMap((headerName) => {
+    const headerValue = request.headers.get(headerName);
+    return headerValue
+      ? headerValue
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0)
+      : [];
+  });
+
+  if (!providedSignatures.length) {
+    throw new WebhookAuthorizationError('Missing WhatsApp webhook signature.');
+  }
+
+  const digest = createHmac('sha256', secret).update(rawBody).digest();
+  const expectedSignatures = [
+    digest.toString('hex'),
+    `sha256=${digest.toString('hex')}`,
+    digest.toString('base64'),
+    `sha256=${digest.toString('base64')}`,
+  ];
+
+  const isAuthorized = providedSignatures.some((providedSignature) =>
+    expectedSignatures.some((expectedSignature) =>
+      timingSafeEqualText(providedSignature, expectedSignature)
+    )
+  );
+
+  if (!isAuthorized) {
+    throw new WebhookAuthorizationError('Invalid WhatsApp webhook signature.');
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const json = (await request.json()) as Record<string, unknown>;
+    const rawBody = await request.text();
+    verifyWebhookSignature(request, rawBody);
+
+    const json = JSON.parse(rawBody) as Record<string, unknown>;
     const payload = whatsappWebhookSchema.parse({
       from: json.from || json.phone,
       body: extractMessageBody(json),
@@ -102,6 +163,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 400 });
+    const status =
+      error instanceof WebhookAuthorizationError
+        ? 401
+        : error instanceof WebhookConfigurationError
+          ? 500
+          : 400;
+
+    return NextResponse.json({ error: String(error) }, { status });
   }
 }

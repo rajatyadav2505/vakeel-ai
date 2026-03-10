@@ -277,15 +277,12 @@ async function processSingleJob(job: SimulationJobRow) {
 export async function processSimulationQueue(params?: { limit?: number }) {
   const limit = Math.max(1, Math.min(10, params?.limit ?? 3));
   const supabase = createSupabaseServerClient();
-  const queuedRes = await supabase
-    .from('simulation_jobs')
-    .select('id,owner_user_id,case_id,mode,status,objective,depth,payload,attempts')
-    .eq('status', 'queued')
-    .order('queued_at', { ascending: true })
-    .limit(limit);
+  const queuedRes = await supabase.rpc('claim_simulation_jobs', {
+    job_limit: limit,
+  });
 
   if (queuedRes.error) {
-    throw new Error(`Failed to read simulation queue: ${queuedRes.error.message}`);
+    throw new Error(`Failed to claim simulation queue jobs: ${queuedRes.error.message}`);
   }
 
   let processed = 0;
@@ -296,8 +293,7 @@ export async function processSimulationQueue(params?: { limit?: number }) {
   for (const row of queuedRes.data ?? []) {
     const job = row as SimulationJobRow;
     processed += 1;
-    const attempts = (job.attempts ?? 0) + 1;
-    await markJobStatus({ jobId: job.id, status: 'processing', attempts });
+    const attempts = job.attempts ?? 1;
 
     try {
       const simulationId = await processSingleJob(job);

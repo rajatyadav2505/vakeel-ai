@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { env } from '@/lib/env';
@@ -7,19 +8,37 @@ const bodySchema = z.object({
   limit: z.number().int().min(1).max(10).optional(),
 });
 
-function isWorkerAuthorized(request: NextRequest) {
+class WorkerConfigurationError extends Error {}
+
+function getConfiguredWorkerToken() {
   const configuredToken = env.SIMULATION_WORKER_TOKEN?.trim();
-  if (!configuredToken) return true;
+  if (!configuredToken) {
+    throw new WorkerConfigurationError('SIMULATION_WORKER_TOKEN is not configured.');
+  }
+  return configuredToken;
+}
+
+function timingSafeEqualText(left: string, right: string) {
+  const leftBytes = Buffer.from(left);
+  const rightBytes = Buffer.from(right);
+  if (leftBytes.length !== rightBytes.length) return false;
+  return timingSafeEqual(leftBytes, rightBytes);
+}
+
+function isWorkerAuthorized(request: NextRequest, configuredToken: string) {
   const token =
     request.headers.get('x-worker-token') ??
     request.nextUrl.searchParams.get('token') ??
     '';
-  return token === configuredToken;
+  const normalizedToken = token.trim();
+  if (!normalizedToken) return false;
+  return timingSafeEqualText(normalizedToken, configuredToken);
 }
 
 export async function POST(request: NextRequest) {
   try {
-    if (!isWorkerAuthorized(request)) {
+    const configuredToken = getConfiguredWorkerToken();
+    if (!isWorkerAuthorized(request, configuredToken)) {
       return NextResponse.json({ error: 'Unauthorized worker token.' }, { status: 401 });
     }
 
@@ -33,6 +52,9 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json({ ok: true, ...output });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 400 });
+    const status = error instanceof WorkerConfigurationError ? 500 : 400;
+    const message =
+      error instanceof WorkerConfigurationError ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status });
   }
 }

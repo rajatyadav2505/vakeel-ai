@@ -46,7 +46,7 @@ export function solveNashHeuristic(
 }
 
 export function monteCarloBranchScore(branches: number[], simulations = 1000, seed?: number): number {
-  if (!branches.length) return 0;
+  if (!branches.length || simulations <= 0) return 0;
   const random = typeof seed === 'number' ? seededRandom(seed) : Math.random;
 
   let total = 0;

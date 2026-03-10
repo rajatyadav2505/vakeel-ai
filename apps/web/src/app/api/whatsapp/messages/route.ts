@@ -31,6 +31,10 @@ type MessageRow = {
   } | null;
 };
 
+function toMessageRows(data: unknown): MessageRow[] {
+  return Array.isArray(data) ? (data as MessageRow[]) : [];
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAppUser();
@@ -75,7 +79,7 @@ export async function GET(request: NextRequest) {
       messagesResult = (await legacyQuery) as typeof messagesResult;
     }
 
-    const messageRows = (messagesResult.data ?? []) as MessageRow[];
+    const messageRows = toMessageRows(messagesResult.data);
 
     const items = messageRows.map((row) => ({
       id: row.id,
@@ -109,7 +113,7 @@ export async function GET(request: NextRequest) {
 
     const conversations: Array<{ phone: string; lastMessage: string; updatedAt: string }> = [];
     const seen = new Set<string>();
-    for (const row of (conversationSource.data ?? []) as MessageRow[]) {
+    for (const row of toMessageRows(conversationSource.data)) {
       const contact = row.contact_phone ?? row.sender_phone;
       if (!contact || seen.has(contact)) continue;
       conversations.push({

@@ -105,10 +105,11 @@ describe('legal research packet', () => {
         precedentAdapters: [precedentAdapter],
       }
     );
+    const issueTag = packet.issuesIdentified[0] ?? 'consumer_dispute';
 
     const claims = verifyLegalClaims({
       claims: [
-        { statement: 'Section 10 applies to maintainability in this case.', issueTag: packet.issuesIdentified[0] },
+        { statement: 'Section 10 applies to maintainability in this case.', issueTag },
         { statement: 'Unrelated tax proposition with no authority in record.', issueTag: 'tax' },
       ],
       packet,

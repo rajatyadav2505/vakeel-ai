@@ -33,6 +33,7 @@ const envSchema = z.object({
   SCC_ONLINE_SEARCH_URL: z.string().url().optional(),
   DATA_ENCRYPTION_KEY: z.string().optional(),
   SIMULATION_WORKER_TOKEN: z.string().optional(),
+  WHATSAPP_WEBHOOK_SECRET: z.string().optional(),
 });
 
 const raw = {
@@ -71,6 +72,7 @@ const raw = {
   SCC_ONLINE_SEARCH_URL: process.env.SCC_ONLINE_SEARCH_URL,
   DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY,
   SIMULATION_WORKER_TOKEN: process.env.SIMULATION_WORKER_TOKEN,
+  WHATSAPP_WEBHOOK_SECRET: process.env.WHATSAPP_WEBHOOK_SECRET,
 };
 
 const parsed = envSchema.safeParse(raw);

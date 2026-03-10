@@ -28,4 +28,8 @@ describe('monteCarloBranchScore', () => {
     expect(first).toBe(second);
     expect(third).not.toBe(first);
   });
+
+  it('returns 0 when simulations is not positive', () => {
+    expect(monteCarloBranchScore([1.2, 5.1], 0, 42)).toBe(0);
+  });
 });
