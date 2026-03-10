@@ -19,6 +19,9 @@ export default async function DemoPage() {
     documents: KAUTILYA_CERES_FIXTURE_CASE.documents,
     strategyMode: 'robust_mode',
     computeMode: 'standard',
+    llmConfig: {
+      provider: 'ollama',
+    },
   });
 
   return (

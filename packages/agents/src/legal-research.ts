@@ -8,7 +8,9 @@ import type {
   StatutoryAuthority,
   Citation,
 } from '@nyaya/shared';
+import { Redis } from '@upstash/redis';
 import { z } from 'zod';
+import { getAgentsEnv } from './env';
 import { invokeJsonModel, type RuntimeLlmConfig } from './llm';
 import { searchKanoon } from './tools';
 
@@ -19,6 +21,8 @@ const DEFAULT_LATEST_LOOKBACK_MONTHS = 24;
 const issueRefinementSchema = z.object({
   issues: z.array(z.string().min(1)).max(20).optional(),
 });
+const RESEARCH_CACHE_KEY_PREFIX = 'legal-research';
+const RESEARCH_CACHE_TTL_SECONDS = Math.ceil(STATUTES_TTL_MS / 1000);
 
 interface CachedStatutes {
   fetchedAt: number;
@@ -39,6 +43,7 @@ interface CachedResearchEntry {
 }
 
 const RESEARCH_CACHE = new Map<string, CachedResearchEntry>();
+let researchRedis: Redis | null | undefined;
 
 export interface LegalResearchInput {
   caseId: string;
@@ -166,6 +171,56 @@ function clamp(value: number, min: number, max: number) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function getResearchRedis() {
+  if (researchRedis !== undefined) return researchRedis;
+
+  const env = getAgentsEnv();
+  if (env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN) {
+    researchRedis = new Redis({
+      url: env.UPSTASH_REDIS_REST_URL,
+      token: env.UPSTASH_REDIS_REST_TOKEN,
+    });
+  } else {
+    researchRedis = null;
+  }
+
+  return researchRedis;
+}
+
+function researchCacheKey(queryHash: string) {
+  return `${RESEARCH_CACHE_KEY_PREFIX}:${queryHash}`;
+}
+
+async function getCachedResearchEntry(queryHash: string) {
+  const redis = getResearchRedis();
+  if (redis) {
+    try {
+      const cached = await redis.get<CachedResearchEntry>(researchCacheKey(queryHash));
+      if (cached && typeof cached === 'object') {
+        RESEARCH_CACHE.set(queryHash, cached);
+        return cached;
+      }
+    } catch (error) {
+      console.warn('[legal-research] redis cache read failed:', error);
+    }
+  }
+
+  return RESEARCH_CACHE.get(queryHash) ?? {};
+}
+
+async function setCachedResearchEntry(queryHash: string, entry: CachedResearchEntry) {
+  RESEARCH_CACHE.set(queryHash, entry);
+
+  const redis = getResearchRedis();
+  if (!redis) return;
+
+  try {
+    await redis.set(researchCacheKey(queryHash), entry, { ex: RESEARCH_CACHE_TTL_SECONDS });
+  } catch (error) {
+    console.warn('[legal-research] redis cache write failed:', error);
+  }
 }
 
 function normalizeText(input: string) {
@@ -533,7 +588,7 @@ const indiaCodeStatuteAdapter: StatuteSourceAdapter = {
 const indiaCodeRemoteStatuteAdapter: StatuteSourceAdapter = {
   id: 'india_code_remote_adapter',
   async search(input) {
-    const baseUrl = process.env.INDIA_CODE_SEARCH_URL?.trim();
+    const baseUrl = getAgentsEnv().INDIA_CODE_SEARCH_URL?.trim();
     if (!baseUrl) return [];
     const now = nowIso();
     const out: StatutoryAuthority[] = [];
@@ -953,7 +1008,7 @@ export async function buildLegalResearchPacket(
   });
 
   const nowMs = Date.now();
-  const entry = RESEARCH_CACHE.get(queryHash) ?? {};
+  const entry = await getCachedResearchEntry(queryHash);
   const statuteAdapters = config?.statuteAdapters ?? [indiaCodeRemoteStatuteAdapter, indiaCodeStatuteAdapter];
   const precedentAdapters = config?.precedentAdapters ?? [
     ecourtsPrecedentAdapter,
@@ -1064,7 +1119,7 @@ export async function buildLegalResearchPacket(
     }
   }
 
-  RESEARCH_CACHE.set(queryHash, entry);
+  await setCachedResearchEntry(queryHash, entry);
 
   const authorityCoverageScore = computeCoverage({
     issues: issuesIdentified,

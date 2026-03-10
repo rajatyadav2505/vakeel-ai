@@ -5,11 +5,12 @@ import {
   solveNashHeuristic,
   type Citation,
 } from '@nyaya/shared';
+import { getAgentsEnv } from './env';
 
 const KANOON_API_BASE = 'https://api.indiankanoon.org';
 
 function kanoonHeaders() {
-  const token = process.env.INDIANKANOON_API_TOKEN;
+  const token = getAgentsEnv().INDIANKANOON_API_TOKEN;
   return token ? { Authorization: `Token ${token}` } : {};
 }
 

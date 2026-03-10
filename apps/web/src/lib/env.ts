@@ -34,6 +34,14 @@ const envSchema = z.object({
   DATA_ENCRYPTION_KEY: z.string().optional(),
   SIMULATION_WORKER_TOKEN: z.string().optional(),
   WHATSAPP_WEBHOOK_SECRET: z.string().optional(),
+}).superRefine((value, ctx) => {
+  if ((value.GUPSHUP_API_KEY || value.GUPSHUP_APP_NAME) && !value.WHATSAPP_WEBHOOK_SECRET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['WHATSAPP_WEBHOOK_SECRET'],
+      message: 'WHATSAPP_WEBHOOK_SECRET is required when WhatsApp integration is configured.',
+    });
+  }
 });
 
 type Env = z.infer<typeof envSchema>;

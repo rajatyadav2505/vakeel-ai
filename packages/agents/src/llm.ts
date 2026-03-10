@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getAgentsEnv } from './env';
 
 const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
 const OPENROUTER_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -131,22 +132,23 @@ function resolveAnthropicMessagesUrl(baseUrl: string) {
 }
 
 function resolveApiKey(provider: SupportedLlmProvider, configuredApiKey?: string | null) {
+  const env = getAgentsEnv();
   const explicit = configuredApiKey?.trim();
   if (explicit) return explicit;
 
-  if (provider === 'openrouter') return process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || '';
+  if (provider === 'openrouter') return env.OPENROUTER_API_KEY || env.OPENAI_API_KEY || '';
   if (provider === 'google') {
-    return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.OPENAI_API_KEY || '';
+    return env.GEMINI_API_KEY || env.GOOGLE_API_KEY || env.OPENAI_API_KEY || '';
   }
-  if (provider === 'groq') return process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || '';
-  if (provider === 'cerebras') return process.env.CEREBRAS_API_KEY || process.env.OPENAI_API_KEY || '';
-  if (provider === 'github') return process.env.GITHUB_TOKEN || process.env.OPENAI_API_KEY || '';
-  if (provider === 'deepseek') return process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || '';
-  if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY || '';
-  if (provider === 'ollama') return process.env.OLLAMA_API_KEY || '';
-  if (provider === 'sarvam') return process.env.SARVAM_API_KEY || '';
+  if (provider === 'groq') return env.GROQ_API_KEY || env.OPENAI_API_KEY || '';
+  if (provider === 'cerebras') return env.CEREBRAS_API_KEY || env.OPENAI_API_KEY || '';
+  if (provider === 'github') return env.GITHUB_TOKEN || env.OPENAI_API_KEY || '';
+  if (provider === 'deepseek') return env.DEEPSEEK_API_KEY || env.OPENAI_API_KEY || '';
+  if (provider === 'anthropic') return env.ANTHROPIC_API_KEY || '';
+  if (provider === 'ollama') return env.OLLAMA_API_KEY || '';
+  if (provider === 'sarvam') return env.SARVAM_API_KEY || '';
 
-  return process.env.OPENAI_API_KEY || '';
+  return env.OPENAI_API_KEY || '';
 }
 
 function providerRequiresApiKey(provider: SupportedLlmProvider) {
@@ -266,7 +268,8 @@ async function invokeOpenAiCompatible<T>(params: {
   }
 
   if (params.provider === 'openrouter') {
-    const referer = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL;
+    const agentsEnv = getAgentsEnv();
+    const referer = agentsEnv.APP_BASE_URL || agentsEnv.NEXT_PUBLIC_APP_URL;
     if (referer) headers['HTTP-Referer'] = referer;
     headers['X-Title'] = 'Nyaya Mitra';
   }
@@ -433,7 +436,9 @@ export async function invokeJsonModel<T>(params: {
   }
 
   const apiKey = resolveApiKey(provider, params.llmConfig?.apiKey);
-  if (providerRequiresApiKey(provider) && !apiKey) return null;
+  if (providerRequiresApiKey(provider) && !apiKey) {
+    throw new Error(`Missing API key for provider "${provider}". Update the provider settings and retry.`);
+  }
 
   const temperature = params.temperature ?? 0.35;
   const maxTokens = params.maxTokens ?? 900;

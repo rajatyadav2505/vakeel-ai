@@ -12,6 +12,7 @@
   "dependencies": {
     "@langchain/core": "^1.1.29",
     "@langchain/langgraph": "^1.2.0",
+    "@upstash/redis": "^1.35.6",
     "zod": "^4.1.8",
     "@nyaya/shared": "1.0.0"
   },
