@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DEFAULT_LLM_BASE_URL, DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER } from '@/lib/llm-settings';
 
 const COMPLIANCE_ITEMS = [
   { label: 'Lawyer verification before petition export', active: true },
@@ -18,10 +19,10 @@ const COMPLIANCE_ITEMS = [
 ];
 
 const PROVIDERS = [
+  'groq',
   'sarvam',
   'google',
   'openrouter',
-  'groq',
   'cerebras',
   'deepseek',
   'github',
@@ -38,7 +39,7 @@ const PROVIDER_DEFAULTS: Record<(typeof PROVIDERS)[number], { model: string; bas
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
   },
   openrouter: { model: 'openrouter/free', baseUrl: 'https://openrouter.ai/api/v1' },
-  groq: { model: 'deepseek-r1-distill-llama-70b', baseUrl: 'https://api.groq.com/openai/v1' },
+  groq: { model: 'openai/gpt-oss-120b', baseUrl: 'https://api.groq.com/openai/v1' },
   cerebras: { model: 'gpt-oss-120b', baseUrl: 'https://api.cerebras.ai/v1' },
   deepseek: { model: 'deepseek-reasoner', baseUrl: 'https://api.deepseek.com/v1' },
   github: { model: 'DeepSeek-R1', baseUrl: 'https://models.inference.ai.azure.com' },
@@ -64,9 +65,9 @@ interface SettingsPayload {
 }
 
 const DEFAULT_SETTINGS: SettingsPayload = {
-  llmProvider: 'sarvam',
-  llmModel: PROVIDER_DEFAULTS.sarvam.model,
-  llmBaseUrl: PROVIDER_DEFAULTS.sarvam.baseUrl,
+  llmProvider: DEFAULT_LLM_PROVIDER,
+  llmModel: DEFAULT_LLM_MODEL,
+  llmBaseUrl: DEFAULT_LLM_BASE_URL,
   notificationsEnabled: true,
   realtimeUpdatesEnabled: true,
   freeTierOnly: true,

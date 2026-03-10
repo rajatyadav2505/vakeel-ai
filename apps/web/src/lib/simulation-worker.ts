@@ -1,5 +1,6 @@
 import { runKautilyaCeresWarGame, runOrchestratedWarGame, runSingleAgentSimulation } from '@nyaya/agents';
 import type { DocumentType } from '@nyaya/shared';
+import { resolveRuntimeLlmConfig } from '@/lib/llm-settings';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { persistKautilyaStrategyRun } from '@/lib/strategy-run-persistence';
 
@@ -103,17 +104,7 @@ async function getUserLlmConfig(userId: string) {
     return undefined;
   }
 
-  return {
-    provider: settings.data.llm_provider ?? 'sarvam',
-    model: settings.data.llm_model ?? 'sarvam-m',
-    apiKey: settings.data.llm_api_key ?? undefined,
-    baseUrl: settings.data.llm_base_url ?? undefined,
-    freeTierOnly: settings.data.free_tier_only ?? true,
-    outputLanguage:
-      settings.data.preferred_language === 'hi-IN'
-        ? ('hi-IN' as const)
-        : ('en-IN' as const),
-  };
+  return resolveRuntimeLlmConfig(settings.data);
 }
 
 async function insertAuditLog(params: {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { runSingleAgentSimulation } from '@nyaya/agents';
 import { sendWhatsAppInteractiveTemplate, sendWhatsAppText } from '@/lib/whatsapp';
+import { resolveRuntimeLlmConfig } from '@/lib/llm-settings';
 import { sanitizePlainText } from '@/lib/utils';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { requireAppUser } from '@/lib/auth';
@@ -104,20 +105,7 @@ export async function POST(request: NextRequest) {
       if (!caseRes.data) {
         return NextResponse.json({ error: 'Case not found for grounded WhatsApp reply.' }, { status: 404 });
       }
-
-      const llmConfig = settingsRes.data
-        ? {
-            provider: settingsRes.data.llm_provider ?? 'sarvam',
-            model: settingsRes.data.llm_model ?? 'sarvam-m',
-            apiKey: settingsRes.data.llm_api_key ?? undefined,
-            baseUrl: settingsRes.data.llm_base_url ?? undefined,
-            freeTierOnly: settingsRes.data.free_tier_only ?? true,
-            outputLanguage:
-              settingsRes.data.preferred_language === 'hi-IN'
-                ? ('hi-IN' as const)
-                : ('en-IN' as const),
-          }
-        : undefined;
+      const llmConfig = settingsRes.data ? resolveRuntimeLlmConfig(settingsRes.data) : undefined;
 
       const simulation = await runSingleAgentSimulation({
         caseId: caseRes.data.id,

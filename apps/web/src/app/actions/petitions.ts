@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { petitionRequestSchema } from '@nyaya/shared';
 import { generateFormattedPetition } from '@nyaya/agents';
 import { requireAppUser } from '@/lib/auth';
+import { resolveRuntimeLlmConfig } from '@/lib/llm-settings';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { logAiAudit } from '@/lib/audit';
@@ -48,17 +49,7 @@ async function getUserLlmConfig(userId: string) {
     return undefined;
   }
 
-  return {
-    provider: settings.data.llm_provider ?? 'sarvam',
-    model: settings.data.llm_model ?? 'sarvam-m',
-    apiKey: settings.data.llm_api_key ?? undefined,
-    baseUrl: settings.data.llm_base_url ?? undefined,
-    freeTierOnly: settings.data.free_tier_only ?? true,
-    outputLanguage:
-      settings.data.preferred_language === 'hi-IN'
-        ? ('hi-IN' as const)
-        : ('en-IN' as const),
-  };
+  return resolveRuntimeLlmConfig(settings.data);
 }
 
 export async function generatePetitionAction(formData: FormData) {

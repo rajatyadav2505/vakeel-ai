@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAppUser } from '@/lib/auth';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import {
+  DEFAULT_LLM_BASE_URL,
+  DEFAULT_LLM_MODEL,
+  DEFAULT_LLM_PROVIDER,
+  resolveRuntimeLlmConfig,
+} from '@/lib/llm-settings';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { sanitizePlainText } from '@/lib/utils';
 
@@ -40,9 +46,9 @@ const updateSchema = z.object({
 });
 
 const DEFAULT_SETTINGS = {
-  llmProvider: 'sarvam' as LlmProvider,
-  llmModel: 'sarvam-m',
-  llmBaseUrl: 'https://api.sarvam.ai/v1',
+  llmProvider: DEFAULT_LLM_PROVIDER as LlmProvider,
+  llmModel: DEFAULT_LLM_MODEL,
+  llmBaseUrl: DEFAULT_LLM_BASE_URL,
   notificationsEnabled: true,
   realtimeUpdatesEnabled: true,
   freeTierOnly: true,
@@ -80,13 +86,15 @@ function toResponse(record: {
   const preferredLanguage = languageSchema.safeParse(record.preferred_language);
   const kautilyaMode = strategyModeSchema.safeParse(record.kautilya_ceres_default_mode);
   const kautilyaCompute = computeModeSchema.safeParse(record.kautilya_ceres_compute_mode);
+  const resolvedLlm = resolveRuntimeLlmConfig(record);
   return {
-    llmProvider: provider.success ? provider.data : DEFAULT_SETTINGS.llmProvider,
-    llmModel: record.llm_model ?? DEFAULT_SETTINGS.llmModel,
-    llmBaseUrl: record.llm_base_url ?? DEFAULT_SETTINGS.llmBaseUrl,
+    llmProvider:
+      resolvedLlm.provider ?? (provider.success ? provider.data : DEFAULT_SETTINGS.llmProvider),
+    llmModel: resolvedLlm.model ?? record.llm_model ?? DEFAULT_SETTINGS.llmModel,
+    llmBaseUrl: resolvedLlm.baseUrl ?? record.llm_base_url ?? DEFAULT_SETTINGS.llmBaseUrl,
     notificationsEnabled: record.notifications_enabled ?? DEFAULT_SETTINGS.notificationsEnabled,
     realtimeUpdatesEnabled: record.realtime_updates_enabled ?? DEFAULT_SETTINGS.realtimeUpdatesEnabled,
-    freeTierOnly: record.free_tier_only ?? DEFAULT_SETTINGS.freeTierOnly,
+    freeTierOnly: resolvedLlm.freeTierOnly ?? DEFAULT_SETTINGS.freeTierOnly,
     defaultPageSize: record.default_page_size ?? DEFAULT_SETTINGS.defaultPageSize,
     timezone: record.timezone ?? DEFAULT_SETTINGS.timezone,
     preferredLanguage: preferredLanguage.success
@@ -124,7 +132,22 @@ async function getSettingsForUser(userId: string) {
 
   const { data: inserted, error: insertError } = await supabase
     .from('user_settings')
-    .upsert({ owner_user_id: userId }, { onConflict: 'owner_user_id' })
+    .upsert(
+      {
+        owner_user_id: userId,
+        llm_provider: DEFAULT_SETTINGS.llmProvider,
+        llm_model: DEFAULT_SETTINGS.llmModel,
+        llm_base_url: DEFAULT_SETTINGS.llmBaseUrl,
+        free_tier_only: DEFAULT_SETTINGS.freeTierOnly,
+        default_page_size: DEFAULT_SETTINGS.defaultPageSize,
+        timezone: DEFAULT_SETTINGS.timezone,
+        preferred_language: DEFAULT_SETTINGS.preferredLanguage,
+        kautilya_ceres_enabled: DEFAULT_SETTINGS.kautilyaCeresEnabled,
+        kautilya_ceres_default_mode: DEFAULT_SETTINGS.kautilyaCeresDefaultMode,
+        kautilya_ceres_compute_mode: DEFAULT_SETTINGS.kautilyaCeresComputeMode,
+      },
+      { onConflict: 'owner_user_id' }
+    )
     .select(
       'owner_user_id,llm_provider,llm_model,llm_api_key,llm_base_url,notifications_enabled,realtime_updates_enabled,free_tier_only,default_page_size,timezone,preferred_language,kautilya_ceres_enabled,kautilya_ceres_default_mode,kautilya_ceres_compute_mode'
     )

@@ -89,7 +89,7 @@ function extractTextContent(content: unknown): string {
 function defaultModelForProvider(provider: SupportedLlmProvider) {
   if (provider === 'google') return 'gemini-2.5-flash';
   if (provider === 'openrouter') return 'deepseek/deepseek-r1-0528:free';
-  if (provider === 'groq') return 'deepseek-r1-distill-llama-70b';
+  if (provider === 'groq') return 'openai/gpt-oss-120b';
   if (provider === 'cerebras') return 'gpt-oss-120b';
   if (provider === 'github') return 'DeepSeek-R1';
   if (provider === 'deepseek') return 'deepseek-reasoner';
@@ -425,7 +425,7 @@ export async function invokeJsonModel<T>(params: {
   llmConfig?: RuntimeLlmConfig;
   schema: z.ZodType<T>;
 }): Promise<T | null> {
-  const provider = params.llmConfig?.provider ?? 'sarvam';
+  const provider = params.llmConfig?.provider ?? 'groq';
   const model = params.llmConfig?.model?.trim() || defaultModelForProvider(provider);
   const freeTierOnly = params.llmConfig?.freeTierOnly ?? true;
 
